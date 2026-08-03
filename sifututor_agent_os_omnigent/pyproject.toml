@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sifututor-agent-os-omnigent"
+version = "0.1.0"
+description = "Sifututor Agent OS policy adapter for Omnigent"
+requires-python = ">=3.12"
+dependencies = ["omnigent>=0.7.0,<0.9"]
+
+[tool.setuptools]
+packages = ["sifututor_agent_os_omnigent"]
+package-dir = { sifututor_agent_os_omnigent = "." }
