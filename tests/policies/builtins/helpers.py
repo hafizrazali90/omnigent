@@ -79,6 +79,7 @@ def tool_result_event(
     result: str,
     session_state: dict[str, Any] | None = None,  # type: ignore[explicit-any]
     request_arguments: dict[str, Any] | None = None,  # type: ignore[explicit-any]
+    succeeded: bool | None = None,
 ) -> PolicyEvent:
     """
     Build a ``tool_result`` :class:`PolicyEvent` (server-side shape).
@@ -99,7 +100,10 @@ def tool_result_event(
     event: PolicyEvent = {
         "type": "tool_result",
         "target": tool,
-        "data": {"result": result},
+        "data": {
+            "result": result,
+            **({"succeeded": succeeded} if succeeded is not None else {}),
+        },
         "context": {"actor": {}, "usage": {}},
         "session_state": session_state or {},
     }
