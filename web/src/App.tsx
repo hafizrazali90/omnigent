@@ -51,6 +51,10 @@ const TasksPage = withPageView(
   "tasks",
   lazy(() => import("@/pages/TasksPage").then((m) => ({ default: m.TasksPage }))),
 );
+const ControlRoomPage = withPageView(
+  "control_room",
+  lazy(() => import("@/pages/ControlRoomPage").then((m) => ({ default: m.ControlRoomPage }))),
+);
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -149,6 +153,7 @@ function App({ basename }: AppProps = {}) {
           <Route path={`${prefix}/c/:conversationId`} element={<ChatPage />} />
           <Route path={`${prefix}/inbox`} element={<InboxPage />} />
           <Route path={`${prefix}/tasks`} element={<TasksPage />} />
+          <Route path={`${prefix}/control-room`} element={<ControlRoomPage />} />
           {/* Settings renders into the chat outlet so the conversations
               sidebar stays put — entering settings only swaps the card's
               content (the section nav) and the main area. The active section

@@ -373,6 +373,19 @@ describe("Sidebar session list", () => {
     expect(within(primaryNav).queryByTestId("toggle-selection-mode")).toBeNull();
   });
 
+  it("renders and activates the Control Room navigation row", () => {
+    mockConversations(THREE_TYPE_CONVERSATIONS);
+    renderSidebar(true, "/control-room");
+
+    const controlRoom = screen.getByTestId("control-room-nav");
+    expect(controlRoom).toHaveAttribute("href", "/control-room");
+    expect(controlRoom).toHaveTextContent("Control Room");
+    expect(controlRoom.className).toContain("bg-[var(--sidebar-active)]");
+    expect(screen.getByTestId("new-chat-button").className).not.toContain(
+      "bg-[var(--sidebar-active)]",
+    );
+  });
+
   it("reveals session selection as an icon action on the Sessions header", () => {
     mockConversations(THREE_TYPE_CONVERSATIONS);
     renderSidebar();

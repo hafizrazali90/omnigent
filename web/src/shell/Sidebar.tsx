@@ -23,6 +23,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
+  Columns3Icon,
   CircleStopIcon,
   FolderIcon,
   FolderInputIcon,
@@ -265,15 +266,18 @@ function useActiveNavItem(): {
   isNewChatPage: boolean;
   isInboxPage: boolean;
   isTasksPage: boolean;
+  isControlRoomPage: boolean;
 } {
   const { conversationId: activeConversationId } = useParams<{ conversationId: string }>();
   const leaf = useLocation().pathname.split("/").filter(Boolean).at(-1);
   const isInboxPage = leaf === "inbox";
   const isTasksPage = leaf === "tasks";
-  // Exclude inbox/tasks: they also have no `:conversationId`, so they would
-  // otherwise light up the "New session" button.
-  const isNewChatPage = activeConversationId == null && !isInboxPage && !isTasksPage;
-  return { isNewChatPage, isInboxPage, isTasksPage };
+  const isControlRoomPage = leaf === "control-room";
+  // Exclude the routed workspace pages: they also have no `:conversationId`,
+  // so they would otherwise light up the "New session" button.
+  const isNewChatPage =
+    activeConversationId == null && !isInboxPage && !isTasksPage && !isControlRoomPage;
+  return { isNewChatPage, isInboxPage, isTasksPage, isControlRoomPage };
 }
 
 /**
@@ -540,7 +544,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   }
 
   // Which top-level nav button to highlight for the current route.
-  const { isNewChatPage, isInboxPage, isTasksPage } = useActiveNavItem();
+  const { isNewChatPage, isInboxPage, isTasksPage, isControlRoomPage } = useActiveNavItem();
 
   // On /settings the card keeps its chrome but swaps the conversation list
   // for the settings section nav (see settingsNav.tsx) — entering settings
@@ -766,6 +770,21 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
           </div>
 
           <div className="flex flex-col gap-0 px-2 pt-2 pb-0" data-testid="sidebar-primary-nav">
+            <Button
+              asChild
+              className={cn(
+                "sidebar-compact-text h-8 w-full justify-start gap-2 rounded-[var(--radius-otto-button)] border-0 px-2 py-1 font-normal",
+                SIDEBAR_HOVER_HIGHLIGHT,
+                isControlRoomPage && SIDEBAR_ACTIVE_HIGHLIGHT,
+              )}
+              variant="ghost"
+              data-testid="control-room-nav"
+            >
+              <Link to="/control-room" onClick={onNavClick}>
+                <Columns3Icon className="size-3.5 text-muted-foreground" />
+                Control Room
+              </Link>
+            </Button>
             {/* "New session" routes to the home composer ("/"), which now owns
             session creation end-to-end (host/workspace/worktree chips +
             send). Rendered as a Link so cmd/middle-click opens it in a new
