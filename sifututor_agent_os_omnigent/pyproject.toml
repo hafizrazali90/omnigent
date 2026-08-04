@@ -11,6 +11,7 @@ dependencies = ["fastapi>=0.115", "omnigent>=0.7.0,<0.9"]
 
 [project.scripts]
 agent-os-link-continuity = "sifututor_agent_os_omnigent.linking:main"
+agent-os-set-understanding = "sifututor_agent_os_omnigent.understanding:main"
 
 [tool.setuptools]
 packages = ["sifututor_agent_os_omnigent"]

@@ -14,8 +14,9 @@
 // Each row is a Link to the target conversation page so cmd/middle-
 // click opens it in a new tab, matching the sidebar's behavior.
 
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ActivityIcon,
   BookOpenIcon,
@@ -34,6 +35,7 @@ import {
   ListTodoIcon,
   NetworkIcon,
   PlusIcon,
+  PencilIcon,
   ScanSearchIcon,
   SearchIcon,
   ShieldCheckIcon,
@@ -54,11 +56,18 @@ import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
 import { OttoIcon } from "@/components/icons/OttoIcon";
 import { PiIcon } from "@/components/icons/PiIcon";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { RunningDot } from "@/components/RunningDot";
 import { MAX_TREE_DEPTH, useChildSessions, type ChildSessionInfo } from "@/hooks/useChildSessions";
 import { useSession } from "@/hooks/useSession";
 import { useAgentOsContinuity, type AgentOsContinuity } from "@/hooks/useAgentOsContinuity";
-import type { SessionItem } from "@/lib/types";
+import {
+  agentOsUnderstandingFromLabels,
+  correctedUnderstandingLabels,
+  type AgentOsTaskUnderstanding,
+} from "@/lib/agentOsUnderstanding";
+import { postEvent, updateSession } from "@/lib/sessionsApi";
+import type { Session, SessionItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const SubagentsGraphView = lazy(() =>
@@ -298,11 +307,220 @@ function WorkerSidebarSummary({
       </div>
 
       {continuity && <ContinuitySummary continuity={continuity} />}
+      <TaskUnderstandingSummary session={rootSession ?? session} />
 
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium">Workers</p>
         <span className="text-[10px] text-muted-foreground">Live session tree</span>
       </div>
+    </section>
+  );
+}
+
+function TaskUnderstandingSummary({ session }: { session: Session | null }) {
+  const understanding = agentOsUnderstandingFromLabels(session?.labels);
+  if (!session || !understanding) return null;
+  return (
+    <TaskUnderstandingCard
+      key={session.id}
+      sessionId={session.id}
+      initialUnderstanding={understanding}
+    />
+  );
+}
+
+function TaskUnderstandingCard({
+  sessionId,
+  initialUnderstanding,
+}: {
+  sessionId: string;
+  initialUnderstanding: AgentOsTaskUnderstanding;
+}) {
+  const queryClient = useQueryClient();
+  const {
+    project: initialProject,
+    workflow: initialWorkflow,
+    status: initialStatus,
+    question: initialQuestion,
+    source: initialSource,
+  } = initialUnderstanding;
+  const initialSignature = [
+    initialProject,
+    initialWorkflow,
+    initialStatus,
+    initialQuestion,
+    initialSource,
+  ].join("\u0000");
+  const lastInitialSignature = useRef(initialSignature);
+  const [understanding, setUnderstanding] =
+    useState<AgentOsTaskUnderstanding>(initialUnderstanding);
+  const [editing, setEditing] = useState(false);
+  const [project, setProject] = useState(initialUnderstanding.project);
+  const [workflow, setWorkflow] = useState(initialUnderstanding.workflow);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialSignature === lastInitialSignature.current) return;
+    if (editing || saving) return;
+    lastInitialSignature.current = initialSignature;
+    setUnderstanding({
+      project: initialProject,
+      workflow: initialWorkflow,
+      status: initialStatus,
+      question: initialQuestion,
+      source: initialSource,
+    });
+    setProject(initialProject);
+    setWorkflow(initialWorkflow);
+  }, [
+    editing,
+    initialProject,
+    initialQuestion,
+    initialSignature,
+    initialSource,
+    initialStatus,
+    initialWorkflow,
+    saving,
+  ]);
+
+  async function saveCorrection() {
+    const nextProject = project.trim();
+    const nextWorkflow = workflow.trim();
+    if (!nextProject || !nextWorkflow) {
+      setError("Project and workflow are both required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const labels = correctedUnderstandingLabels(nextProject, nextWorkflow);
+      const updatedSession = await updateSession(sessionId, { labels });
+      queryClient.setQueryData(["session", sessionId], updatedSession);
+      setUnderstanding({
+        project: nextProject,
+        workflow: nextWorkflow,
+        status: "confirmed",
+        question: "",
+        source: "user-corrected",
+      });
+      setEditing(false);
+      try {
+        await postEvent(sessionId, {
+          type: "message",
+          data: {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  `[Agent OS route correction] Project: ${nextProject}. ` +
+                  `Workflow: ${nextWorkflow}. Use this corrected route for the current task.`,
+              },
+            ],
+          },
+        });
+      } catch {
+        setError("Correction saved, but the worker could not be notified yet.");
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save the correction.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section
+      data-testid="agent-os-task-understanding"
+      className={cn(
+        "rounded-md border bg-background/55 px-2.5 py-2",
+        understanding.status === "needs-clarification"
+          ? "border-warning/30 bg-warning/5"
+          : "border-border",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          I understand this as
+        </p>
+        {!editing && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Correct understanding"
+            title="Correct understanding"
+            onClick={() => setEditing(true)}
+          >
+            <PencilIcon className="size-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="mt-2 space-y-2">
+          <label className="block text-[10px] font-medium text-muted-foreground">
+            Project
+            <Input
+              value={project}
+              maxLength={120}
+              onChange={(event) => setProject(event.target.value)}
+              className="mt-1 h-7 text-xs"
+            />
+          </label>
+          <label className="block text-[10px] font-medium text-muted-foreground">
+            Workflow
+            <Input
+              value={workflow}
+              maxLength={120}
+              onChange={(event) => setWorkflow(event.target.value)}
+              className="mt-1 h-7 text-xs"
+            />
+          </label>
+          {error && <p className="text-[10px] text-destructive">{error}</p>}
+          <div className="flex justify-end gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              disabled={saving}
+              onClick={() => {
+                setProject(understanding.project);
+                setWorkflow(understanding.workflow);
+                setEditing(false);
+                setError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" size="xs" disabled={saving} onClick={() => void saveCorrection()}>
+              {saving ? "Saving…" : "Save correction"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[11px]">
+            <dt className="text-muted-foreground">Project</dt>
+            <dd className="font-medium text-foreground/85">{understanding.project}</dd>
+            <dt className="text-muted-foreground">Workflow</dt>
+            <dd className="font-medium text-foreground/85">{understanding.workflow}</dd>
+          </dl>
+          {understanding.status === "needs-clarification" && (
+            <div className="mt-2 rounded border border-warning/25 bg-warning/5 px-2 py-1.5">
+              <p className="text-[10px] font-medium text-warning">Needs clarification</p>
+              {understanding.question && (
+                <p className="mt-0.5 text-[11px] text-foreground/80">{understanding.question}</p>
+              )}
+            </div>
+          )}
+          {understanding.source === "user-corrected" && (
+            <p className="mt-2 text-[10px] text-muted-foreground">Corrected by you</p>
+          )}
+          {error && <p className="mt-1 text-[10px] text-destructive">{error}</p>}
+        </>
+      )}
     </section>
   );
 }

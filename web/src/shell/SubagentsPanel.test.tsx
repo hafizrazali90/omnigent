@@ -1,6 +1,7 @@
 import type * as UseChildSessionsModule from "@/hooks/useChildSessions";
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   BookOpenIcon,
   Code2Icon,
@@ -16,6 +17,7 @@ import { OttoIcon } from "@/components/icons/OttoIcon";
 import { type ChildSessionInfo, useChildSessions } from "@/hooks/useChildSessions";
 import { useSession } from "@/hooks/useSession";
 import { useAgentOsContinuity } from "@/hooks/useAgentOsContinuity";
+import { postEvent, updateSession } from "@/lib/sessionsApi";
 import { iconForAgentType, SubagentsPanel } from "./SubagentsPanel";
 
 vi.mock("@/hooks/useChildSessions", async (importOriginal) => ({
@@ -31,6 +33,11 @@ vi.mock("@/hooks/useSession", () => ({
 
 vi.mock("@/hooks/useAgentOsContinuity", () => ({
   useAgentOsContinuity: vi.fn(),
+}));
+
+vi.mock("@/lib/sessionsApi", () => ({
+  postEvent: vi.fn(),
+  updateSession: vi.fn(),
 }));
 
 // Stub the brand logos with plain SVGs so jsdom doesn't have to resolve
@@ -60,6 +67,8 @@ vi.mock("@/components/icons/OttoIcon", () => ({
 const useChildSessionsMock = vi.mocked(useChildSessions);
 const useSessionMock = vi.mocked(useSession);
 const useAgentOsContinuityMock = vi.mocked(useAgentOsContinuity);
+const updateSessionMock = vi.mocked(updateSession);
+const postEventMock = vi.mocked(postEvent);
 
 interface RenderOptions {
   /** The conversation in main — used only for active-row highlighting. */
@@ -76,14 +85,19 @@ function renderPanel({
   changedCount = 0,
   initialEntries,
 }: RenderOptions & { initialEntries?: string[] } = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <SubagentsPanel
-        conversationId={conversationId}
-        rootSessionId={rootSessionId}
-        changedCount={changedCount}
-      />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <SubagentsPanel
+          conversationId={conversationId}
+          rootSessionId={rootSessionId}
+          changedCount={changedCount}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -157,6 +171,8 @@ beforeEach(() => {
     isLoading: false,
     isError: false,
   } as ReturnType<typeof useAgentOsContinuity>);
+  updateSessionMock.mockReset();
+  postEventMock.mockReset();
   // Default: parent's status is idle. Tests override per-case.
   useSessionMock.mockReturnValue({
     session: {
@@ -284,6 +300,118 @@ describe("SubagentsPanel", () => {
     );
     expect(within(continuity).getByText("2 remembered follow-ups")).toBeInTheDocument();
     expect(screen.getByTestId("worker-sidebar-summary")).toBeInTheDocument();
+  });
+
+  it("shows a correctable Agent OS task understanding", async () => {
+    useChildSessionsMock.mockReturnValue({ children: [], isLoading: false, error: null });
+    useSessionMock.mockReturnValue({
+      session: {
+        id: "conv_root",
+        agentId: "ag_root",
+        agentName: "codex-native-ui",
+        runnerId: null,
+        status: "idle",
+        createdAt: 0,
+        title: "Review the Ripple dashboard",
+        labels: {
+          "agent_os.project": "ripple-suite",
+          "agent_os.workflow": "review",
+          "agent_os.route_status": "understood",
+          "agent_os.route_question": "",
+          "agent_os.route_source": "orchestrator",
+        },
+        items: [],
+        pendingElicitations: [],
+        permissionLevel: 4,
+        parentSessionId: null,
+        subAgentName: null,
+        kind: "default",
+      },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useSession>);
+    updateSessionMock.mockResolvedValue({} as never);
+    postEventMock.mockResolvedValue({ queued: false } as never);
+
+    renderPanel();
+
+    const understanding = screen.getByTestId("agent-os-task-understanding");
+    expect(within(understanding).getByText("ripple-suite")).toBeInTheDocument();
+    expect(within(understanding).getByText("review")).toBeInTheDocument();
+
+    fireEvent.click(within(understanding).getByRole("button", { name: "Correct understanding" }));
+    fireEvent.change(within(understanding).getByLabelText("Project"), {
+      target: { value: "sifu-tutor" },
+    });
+    fireEvent.change(within(understanding).getByLabelText("Workflow"), {
+      target: { value: "bugfix" },
+    });
+    fireEvent.click(within(understanding).getByRole("button", { name: "Save correction" }));
+
+    await waitFor(() =>
+      expect(updateSessionMock).toHaveBeenCalledWith("conv_root", {
+        labels: {
+          "agent_os.project": "sifu-tutor",
+          "agent_os.workflow": "bugfix",
+          "agent_os.route_status": "confirmed",
+          "agent_os.route_question": "",
+          "agent_os.route_source": "user-corrected",
+        },
+      }),
+    );
+    expect(within(understanding).getByText("sifu-tutor")).toBeInTheDocument();
+    expect(within(understanding).getByText("bugfix")).toBeInTheDocument();
+    expect(within(understanding).getByText("Corrected by you")).toBeInTheDocument();
+    expect(postEventMock).toHaveBeenCalledWith("conv_root", {
+      type: "message",
+      data: {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text:
+              "[Agent OS route correction] Project: sifu-tutor. " +
+              "Workflow: bugfix. Use this corrected route for the current task.",
+          },
+        ],
+      },
+    });
+  });
+
+  it("keeps an ambiguous route question visible", () => {
+    useChildSessionsMock.mockReturnValue({ children: [], isLoading: false, error: null });
+    useSessionMock.mockReturnValue({
+      session: {
+        id: "conv_root",
+        agentId: "ag_root",
+        agentName: "codex-native-ui",
+        status: "idle",
+        createdAt: 0,
+        title: "Fix the dashboard",
+        labels: {
+          "agent_os.project": "umbrella",
+          "agent_os.workflow": "triage",
+          "agent_os.route_status": "needs-clarification",
+          "agent_os.route_question": "Which product should this change?",
+        },
+        items: [],
+        pendingElicitations: [],
+        permissionLevel: 4,
+        parentSessionId: null,
+        subAgentName: null,
+        kind: "default",
+      },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useSession>);
+
+    renderPanel();
+
+    const understanding = screen.getByTestId("agent-os-task-understanding");
+    expect(within(understanding).getByText("Needs clarification")).toBeInTheDocument();
+    expect(
+      within(understanding).getByText("Which product should this change?"),
+    ).toBeInTheDocument();
   });
 
   it("always renders a 'main' row linking to the root session", () => {

@@ -65,6 +65,29 @@ absolute, traversal, and outside-root paths fail before any chat metadata is
 written. Authenticated multi-user servers still enforce their normal session
 edit permission on the metadata request.
 
+After the task router has identified the project and workflow, make that
+understanding visible in the same native chat before delegating work:
+
+```bash
+agent-os-set-understanding \
+  --project ripple-suite \
+  --workflow review
+```
+
+If choosing the wrong route could materially change the work, preserve the
+uncertainty and one short question instead of silently guessing:
+
+```bash
+agent-os-set-understanding \
+  --project umbrella \
+  --workflow triage \
+  --question "Which product should this change?"
+```
+
+The helper changes only the current chat's bounded `agent_os.*` route labels.
+The Worker Sidebar shows the result and lets the current user correct it
+without changing the original request or creating another task record.
+
 Do not use the legacy top-level `handler` plus `factory_params` spelling for
 this server-wide policy. Omnigent 0.8 accepts that spelling but currently drops
 the factory arguments when it builds the live policy engine.
