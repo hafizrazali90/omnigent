@@ -382,8 +382,8 @@ export function useIdleNotifications(activeConversationId?: string): void {
 
 /**
  * Build the badge notification's tap target + descriptive text from the set of
- * unread session ids. One unread session → open it; several → open the inbox
- * when any awaits input, else the session list. `undefined` when nothing is
+ * unread session ids. One unread session → open it; several → open Needs You,
+ * where approvals and unseen finished work are assembled. `undefined` when nothing is
  * unread — the badge clears and there's no notification to make actionable.
  *
  * The title is left unset (the shell falls back to the app name) so this ambient
@@ -405,17 +405,8 @@ function badgeActivationFor(
     const label = conversation ? conversationDisplayLabel(conversation) : "A session";
     return { navigatePath: `/c/${id}`, body: `${label} needs your attention` };
   }
-  // `/inbox` lists only sessions awaiting input, so route there only when at
-  // least one counted session actually has a pending prompt; a batch that just
-  // finished (unseen activity, no prompt) would otherwise land on an inbox that
-  // reads "Nothing waiting on you". Fall back to the session list —
-  // ?sidebar=open so phone-width shells (sidebar closed by default) actually
-  // show it instead of a bare composer (see AppShell).
-  const anyAwaiting = conversations.some(
-    (c) => ids.has(c.id) && (c.pending_elicitations_count ?? 0) > 0,
-  );
   return {
-    navigatePath: anyAwaiting ? "/inbox" : "/?sidebar=open",
+    navigatePath: "/needs-you",
     body: `${ids.size} sessions need your attention`,
   };
 }

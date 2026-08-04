@@ -1,10 +1,10 @@
-"""E2E: a pending approval surfaces on the /inbox page and resolves there.
+"""E2E: a pending approval surfaces on the /needs-you page and resolves there.
 
 The Inbox page (``web/src/pages/InboxPage.tsx``) gathers every pending
 ``response.elicitation_request`` across the user's sessions and renders each
 as the same ``ApprovalCard`` the chat uses, with a local submit handler that
 posts the verdict to the owning session. This test raises a gated-push
-approval in a session, navigates to ``/inbox``, asserts the prompt is listed,
+approval in a session, navigates to ``/needs-you``, asserts the prompt is listed,
 approves it from the inbox, and asserts the item drains (the row's pending
 count drops to zero, so it falls out of the inbox).
 
@@ -218,7 +218,7 @@ def test_pending_approval_surfaces_and_resolves_in_inbox(
     page: Page,
     approval_session: tuple[str, str],
 ) -> None:
-    """Gated tool call → /inbox lists the prompt → Approve there → it drains."""
+    """Gated tool call → /needs-you lists the prompt → Approve there → it drains."""
     base_url, session_id = approval_session
 
     # Raise the approval from the chat surface, then leave it pending.
@@ -233,8 +233,9 @@ def test_pending_approval_surfaces_and_resolves_in_inbox(
     # Confirm the server is parked before we navigate away.
     _wait_for(lambda: bool(_pending_elicitations(base_url, session_id)))
 
-    # The inbox gathers the prompt from the session's snapshot.
-    page.goto(f"{base_url}/inbox")
+    # Needs You gathers the prompt from the session's snapshot.
+    page.goto(f"{base_url}/needs-you")
+    expect(page.get_by_role("heading", name="Needs You")).to_be_visible()
     item = page.locator(_INBOX_ITEM).first
     expect(item).to_be_visible(timeout=30_000)
     card = item.locator(_APPROVAL_CARD)
@@ -295,7 +296,9 @@ def test_reparked_elicitation_reliably_resurfaces_in_inbox(
     # in-memory page state, so a reload between retries would wash out the very
     # stale verdict the regression is about. Navigate once, never reload.
     page.goto(f"{base_url}/inbox")
-    expect(page.get_by_text("Nothing waiting on you")).to_be_visible(timeout=_REPARK_TIMEOUT_MS)
+    expect(page.get_by_text("Nothing needs you right now")).to_be_visible(
+        timeout=_REPARK_TIMEOUT_MS
+    )
 
     # A single elicitation id, re-parked repeatedly — the omnigent#927 scenario
     # is one prompt whose hook keeps re-parking the SAME id after each approval.

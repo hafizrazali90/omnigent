@@ -1,6 +1,6 @@
 /**
- * Inbox page (``/inbox``) — every approval prompt waiting on the user,
- * across all of their sessions, rendered as actionable cards.
+ * Needs You page (``/needs-you``; legacy alias ``/inbox``) — approvals,
+ * stopped tasks, unseen completed work, and comments across all sessions.
  *
  * Built entirely from existing primitives:
  *
@@ -40,9 +40,11 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  CircleCheckIcon,
   ChevronDownIcon,
   InboxIcon,
   Loader2Icon,
+  OctagonAlertIcon,
 } from "lucide-react";
 import { ApprovalCard, type SubmitApprovalFn } from "@/components/blocks/ApprovalCard";
 import { PageScroll } from "@/components/PageScroll";
@@ -50,7 +52,18 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useCommentInbox } from "@/hooks/useCommentInbox";
 import { useConversations } from "@/hooks/useConversations";
-import { collectInboxItems, type InboxItem, type InboxSource } from "@/lib/inbox";
+import {
+  collectInboxItems,
+  collectSessionAttention,
+  type InboxItem,
+  type InboxSource,
+} from "@/lib/inbox";
+import {
+  clearUnreadOverride,
+  isConversationUnseen,
+  markConversationSeen,
+  useUnseenTick,
+} from "@/hooks/useUnseenConversations";
 import { relativeTime } from "@/lib/relativeTime";
 import { Link } from "@/lib/routing";
 import { approve, getSession } from "@/lib/sessionsApi";
@@ -86,6 +99,12 @@ export function InboxPage() {
 
   const allRows = (conversationsQuery.data?.pages ?? []).flatMap((page) => page.data);
   const rows = allRows.filter((c) => !c.archived && (c.pending_elicitations_count ?? 0) > 0);
+  // Subscribe to read-state changes so "completed since you last looked"
+  // clears as soon as that task is opened.
+  useUnseenTick();
+  const sessionAttention = collectSessionAttention(allRows, (row) =>
+    isConversationUnseen(row.id, row.updated_at, row.status),
+  );
 
   // Unseen file comments across sessions — the hook filters to rows
   // that report comments and mounts one comments query per such row.
@@ -189,12 +208,19 @@ export function InboxPage() {
 
   return (
     <PageScroll contentClassName="px-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Inbox</h1>
-        {(items.length > 0 || commentInbox.items.length > 0) && (
-          <span className="text-sm text-muted-foreground">
+      <div className="mb-6 flex flex-col items-start gap-2 sm:flex-row sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Needs You</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Decisions, stopped work, completed work, and comments across your sessions.
+          </p>
+        </div>
+        {(items.length > 0 || sessionAttention.length > 0 || commentInbox.items.length > 0) && (
+          <span className="shrink-0 text-sm text-muted-foreground">
             {[
               items.length > 0 && (items.length === 1 ? "1 approval" : `${items.length} approvals`),
+              sessionAttention.length > 0 &&
+                (sessionAttention.length === 1 ? "1 task" : `${sessionAttention.length} tasks`),
               commentInbox.items.length > 0 &&
                 (commentInbox.items.length === 1
                   ? "1 comment"
@@ -230,22 +256,26 @@ export function InboxPage() {
         </div>
       )}
 
-      {assembling && items.length === 0 && commentInbox.items.length === 0 && (
-        <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" />
-          Loading inbox…
-        </div>
-      )}
+      {assembling &&
+        items.length === 0 &&
+        sessionAttention.length === 0 &&
+        commentInbox.items.length === 0 && (
+          <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
+            <Loader2Icon className="size-4 animate-spin" />
+            Checking what needs you…
+          </div>
+        )}
 
       {!assembling &&
         failedSessionCount === 0 &&
         items.length === 0 &&
+        sessionAttention.length === 0 &&
         commentInbox.items.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
             <InboxIcon className="size-8 text-muted-foreground/50" />
-            <p className="text-sm font-medium">Nothing waiting on you</p>
+            <p className="text-sm font-medium">Nothing needs you right now</p>
             <p className="text-xs text-muted-foreground">
-              When an agent needs your input or someone comments on a file, it will show up here.
+              We checked your sessions for approvals, stopped work, completed work, and comments.
             </p>
           </div>
         )}
@@ -337,6 +367,61 @@ export function InboxPage() {
             </div>
           );
         })}
+        {sessionAttention.map((item) => {
+          const isFailed = item.kind === "failed";
+          const title = conversationDisplayLabel(item.row);
+          const agentLabel = getConversationAgentType(item.row);
+          return (
+            <div
+              key={`${item.kind}:${item.row.id}`}
+              data-testid="needs-you-session"
+              data-kind={item.kind}
+              className={cn(
+                "flex items-start gap-3 rounded-xl border bg-card p-4",
+                isFailed ? "border-destructive/30" : "border-border",
+              )}
+            >
+              {isFailed ? (
+                <OctagonAlertIcon className="mt-0.5 size-5 shrink-0 text-destructive" />
+              ) : (
+                <CircleCheckIcon className="mt-0.5 size-5 shrink-0 text-success" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {isFailed ? "Run stopped and needs review" : "Completed since you last looked"}
+                </p>
+                <p className="mt-1 truncate text-sm">
+                  {title}
+                  {agentLabel !== title && (
+                    <span className="ml-2 text-xs text-muted-foreground">{agentLabel}</span>
+                  )}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {isFailed
+                    ? "Open the task to see what stopped and decide the next step."
+                    : "The worker finished new work while you were elsewhere."}
+                </p>
+              </div>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {relativeTime(item.row.updated_at * 1000)}
+                </span>
+                <Button asChild variant="ghost" size="sm" className="text-xs">
+                  <Link
+                    to={`/c/${item.row.id}`}
+                    onClick={() => {
+                      clearUnreadOverride(item.row.id);
+                      markConversationSeen(item.row.id, item.row.updated_at);
+                    }}
+                  >
+                    Open task
+                    <ArrowRightIcon className="ml-1 size-3.5" />
+                  </Link>
+                </Button>
+              </span>
+            </div>
+          );
+        })}
         {commentInbox.items.map((item) => {
           const comment = item.comment;
           // Single-user mode stores no author; mirror CommentsPanel's
@@ -397,12 +482,13 @@ export function InboxPage() {
             </div>
           );
         })}
-        {assembling && (items.length > 0 || commentInbox.items.length > 0) && (
-          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-            <Loader2Icon className="size-3.5 animate-spin" />
-            Checking remaining sessions…
-          </div>
-        )}
+        {assembling &&
+          (items.length > 0 || sessionAttention.length > 0 || commentInbox.items.length > 0) && (
+            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+              <Loader2Icon className="size-3.5 animate-spin" />
+              Checking remaining sessions…
+            </div>
+          )}
       </div>
     </PageScroll>
   );

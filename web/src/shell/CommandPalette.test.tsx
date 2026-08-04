@@ -222,7 +222,7 @@ describe("CommandPalette — actions", () => {
     renderPalette();
 
     expect(screen.getByText("New chat")).toBeTruthy();
-    expect(screen.getByText("Go to Inbox")).toBeTruthy();
+    expect(screen.getByText("Go to Needs You")).toBeTruthy();
     expect(screen.getByText("Go to Settings")).toBeTruthy();
     expect(screen.getByText("Toggle conversations sidebar")).toBeTruthy();
     expect(screen.getByText("Toggle workspace sidebar")).toBeTruthy();

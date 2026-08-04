@@ -135,7 +135,7 @@ import { SessionStateBadge } from "@/components/SessionStateBadge";
 import { useSessionRunnerOnline } from "@/hooks/RunnerHealthProvider";
 import { useActiveRootSessionId } from "@/hooks/useSession";
 import { useCommentInbox } from "@/hooks/useCommentInbox";
-import { sumPendingApprovals } from "@/lib/inbox";
+import { collectSessionAttention, sumPendingApprovals } from "@/lib/inbox";
 import { isSessionStoppable } from "@/lib/sessionStop";
 import { getCurrentUserId, resolveIdentity } from "@/lib/identity";
 import { isImeCompositionKeyEvent } from "@/lib/ime";
@@ -253,15 +253,13 @@ interface SidebarProps {
 }
 
 /**
- * Which top-level nav button (New session / Inbox) is active for the current
+ * Which top-level nav button (New session / Needs You) is active for the current
  * route.
  *
- * The inbox route has no param to key off, and the sidebar is basename-agnostic
- * (in embedded mode the routing seam rebases `to="/inbox"` → `${basename}/inbox`
- * behind its back), so `useMatch` / `NavLink` can't be used without knowing the
- * mount path. Instead compare the active route's last non-empty path segment,
- * which is `inbox` in both standalone and embedded modes. Conversation ids are
- * `conv_…`-prefixed, so a chat route's leaf can never collide with `inbox`.
+ * The route has no param to key off, and the sidebar is basename-agnostic, so
+ * `useMatch` / `NavLink` can't be used without knowing the mount path. Instead
+ * compare the active route's last non-empty path segment. Conversation ids are
+ * `conv_…`-prefixed, so a chat route cannot collide.
  */
 function useActiveNavItem(): {
   isNewChatPage: boolean;
@@ -272,7 +270,7 @@ function useActiveNavItem(): {
 } {
   const { conversationId: activeConversationId } = useParams<{ conversationId: string }>();
   const leaf = useLocation().pathname.split("/").filter(Boolean).at(-1);
-  const isInboxPage = leaf === "inbox";
+  const isInboxPage = leaf === "inbox" || leaf === "needs-you";
   const isTasksPage = leaf === "tasks";
   const isControlRoomPage = leaf === "control-room";
   const isSplitFocusPage = leaf === "split-focus";
@@ -524,19 +522,22 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   // infinite scroll (auto-loading the next page as the sentinel nears view).
   const scrollContainerRef = useRef<HTMLElement>(null);
 
-  // Inbox badge — total approval prompts across loaded rows. Same
-  // `pending_elicitations_count` the per-row "awaiting" hand badge
-  // reads (live via WS /v1/sessions/updates), just summed.
+  // Needs You badge — approval prompts, failed/unseen completed sessions,
+  // and comments across loaded rows.
   const loadedRows = useMemo(
     () => (conversationsQuery.data?.pages ?? []).flatMap((page) => page.data),
     [conversationsQuery.data],
   );
+  useUnseenTick();
   const pendingApprovals = useMemo(() => sumPendingApprovals(loadedRows), [loadedRows]);
-  // Plus unseen file comments — the badge counts everything the Inbox
+  // Plus unseen file comments — the badge counts everything the Needs You
   // page lists. Comment queries are shared with the page/FileViewer
   // (same ["comments", id] keys), so this adds no duplicate fetches.
   const unseenComments = useCommentInbox(loadedRows).items.length;
-  const inboxCount = pendingApprovals + unseenComments;
+  const sessionAttention = collectSessionAttention(loadedRows, (row) =>
+    isConversationUnseen(row.id, row.updated_at, row.status),
+  );
+  const inboxCount = pendingApprovals + sessionAttention.length + unseenComments;
 
   // Click handler for conversation-row Links in the sidebar. The Link
   // handles navigation natively, so cmd/ctrl/middle-click opens new
@@ -845,7 +846,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
             <Button
               asChild
               className={cn(
-                // Same shared nav-row construct as "New session" / "Inbox" so
+                // Same shared nav-row construct as "New session" / "Needs You" so
                 // the active-pill, hover, insets, icon column, and text weight
                 // all match post-refactor.
                 "sidebar-compact-text h-8 w-full justify-start gap-2 rounded-[var(--radius-otto-button)] border-0 px-2 py-1 font-normal",
@@ -870,15 +871,13 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
               )}
               data-testid="inbox-button"
             >
-              <Link to="/inbox" onClick={onNavClick}>
+              <Link to="/needs-you" onClick={onNavClick}>
                 <InboxIcon className="size-3.5 text-muted-foreground" />
-                Inbox
+                Needs You
                 {inboxCount > 0 && (
                   <span
                     aria-label={
-                      inboxCount === 1
-                        ? "1 inbox item waiting"
-                        : `${inboxCount} inbox items waiting`
+                      inboxCount === 1 ? "1 item needs you" : `${inboxCount} items need you`
                     }
                     className="ml-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning/15 px-1 text-10 font-medium text-warning tabular-nums"
                   >

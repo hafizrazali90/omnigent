@@ -21,6 +21,7 @@ import * as conversationsHook from "@/hooks/useConversations";
 import * as commentInboxHook from "@/hooks/useCommentInbox";
 import * as sessionsApi from "@/lib/sessionsApi";
 import type { CommentInbox } from "@/hooks/useCommentInbox";
+import { resetReadStateForTests, seedReadState } from "@/hooks/useUnseenConversations";
 
 // Minimal ApprovalCard stub: renders the message and an Accept button that
 // forwards to the page's submit handler. The real card's form/preview UX is
@@ -114,6 +115,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  resetReadStateForTests();
   vi.mocked(conversationsHook.useConversations).mockReturnValue(conversationsStub([]));
   vi.mocked(commentInboxHook.useCommentInbox).mockReturnValue(commentInboxStub());
   vi.mocked(sessionsApi.getSession).mockResolvedValue({
@@ -137,14 +139,49 @@ describe("InboxPage states", () => {
       conversationsStub([], { isLoading: true }),
     );
     renderPage();
-    expect(screen.getByText("Loading inbox…")).toBeInTheDocument();
+    expect(screen.getByText("Checking what needs you…")).toBeInTheDocument();
   });
 
   it("shows the empty state once settled with nothing waiting", async () => {
     // WHY: a settled list with no approvals and no comments shows the
-    // "Nothing waiting on you" empty state.
+    // "Nothing needs you right now" empty state.
     renderPage();
-    expect(await screen.findByText("Nothing waiting on you")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing needs you right now")).toBeInTheDocument();
+  });
+
+  it("shows failed work and unseen completed work as distinct attention items", async () => {
+    const failed = conversation({
+      id: "failed",
+      title: "Release check",
+      status: "failed",
+      pending_elicitations_count: 0,
+      updated_at: 1_700_000_020,
+    });
+    const completed = conversation({
+      id: "completed",
+      title: "Research summary",
+      status: "idle",
+      pending_elicitations_count: 0,
+      updated_at: 1_700_000_010,
+    });
+    seedReadState([{ id: completed.id, viewer_last_seen: completed.updated_at - 1 }]);
+    vi.mocked(conversationsHook.useConversations).mockReturnValue(
+      conversationsStub([completed, failed]),
+    );
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Needs You" })).toBeInTheDocument();
+    const attention = screen.getAllByTestId("needs-you-session");
+    expect(attention).toHaveLength(2);
+    expect(attention[0]).toHaveTextContent("Run stopped and needs review");
+    expect(attention[0]).toHaveTextContent("Release check");
+    expect(attention[1]).toHaveTextContent("Completed since you last looked");
+    expect(attention[1]).toHaveTextContent("Research summary");
+
+    fireEvent.click(within(attention[1]).getByRole("link", { name: "Open task" }));
+    await waitFor(() => expect(screen.getAllByTestId("needs-you-session")).toHaveLength(1));
+    expect(screen.queryByText("Research summary")).not.toBeInTheDocument();
   });
 
   it("does not show the empty state while more pages are still draining", () => {
@@ -154,8 +191,8 @@ describe("InboxPage states", () => {
       conversationsStub([], { hasNextPage: true }),
     );
     renderPage();
-    expect(screen.queryByText("Nothing waiting on you")).not.toBeInTheDocument();
-    expect(screen.getByText("Loading inbox…")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing needs you right now")).not.toBeInTheDocument();
+    expect(screen.getByText("Checking what needs you…")).toBeInTheDocument();
   });
 
   it("drains remaining list pages while mounted", () => {
@@ -198,7 +235,7 @@ describe("InboxPage approval items", () => {
     vi.mocked(conversationsHook.useConversations).mockReturnValue(conversationsStub(rows));
     renderPage();
 
-    expect(await screen.findByText("Nothing waiting on you")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing needs you right now")).toBeInTheDocument();
     expect(sessionsApi.getSession).not.toHaveBeenCalled();
   });
 
@@ -370,6 +407,6 @@ describe("InboxPage comments and errors", () => {
     fireEvent.click(within(banner).getByRole("button", { name: /Retry/ }));
     expect(retryFailed).toHaveBeenCalled();
     // The error path also suppresses the empty state.
-    expect(screen.queryByText("Nothing waiting on you")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nothing needs you right now")).not.toBeInTheDocument();
   });
 });

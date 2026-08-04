@@ -358,7 +358,7 @@ describe("Sidebar session list", () => {
     expect(within(headerActions).queryByTestId("inbox-button")).toBeNull();
   });
 
-  it("renders Inbox as its own primary navigation row", () => {
+  it("renders Needs You as its own primary navigation row", () => {
     mockConversations(THREE_TYPE_CONVERSATIONS);
     renderSidebar();
 
@@ -367,10 +367,32 @@ describe("Sidebar session list", () => {
 
     expect(primaryNav).toHaveClass("px-2", "pt-2", "pb-0");
     expect(primaryNav).not.toHaveClass("-mt-0.5");
-    expect(inbox).toHaveAttribute("href", "/inbox");
+    expect(inbox).toHaveAttribute("href", "/needs-you");
     expect(inbox).toHaveClass("h-8", "w-full", "justify-start");
-    expect(within(inbox).getByText("Inbox")).toBeInTheDocument();
+    expect(within(inbox).getByText("Needs You")).toBeInTheDocument();
     expect(within(primaryNav).queryByTestId("toggle-selection-mode")).toBeNull();
+  });
+
+  it("counts failed sessions in Needs You without waiting for an approval", () => {
+    mockConversations([
+      conv("conv_failed", "Codex", {
+        status: "failed",
+        pending_elicitations_count: 0,
+      }),
+    ]);
+    renderSidebar();
+
+    expect(screen.getByLabelText("1 item needs you")).toHaveTextContent("1");
+  });
+
+  it("marks Needs You active on both its new route and the legacy inbox route", () => {
+    mockConversations(THREE_TYPE_CONVERSATIONS);
+    const { unmount } = renderSidebar(true, "/needs-you");
+    expect(screen.getByTestId("inbox-button").className).toContain("bg-[var(--sidebar-active)]");
+
+    unmount();
+    renderSidebar(true, "/inbox");
+    expect(screen.getByTestId("inbox-button").className).toContain("bg-[var(--sidebar-active)]");
   });
 
   it("renders and activates the Control Room navigation row", () => {
@@ -436,8 +458,8 @@ describe("Sidebar session list", () => {
     expect(screen.queryByTestId("scheduled-tasks-button")).toBeNull();
 
     // It sits in the primary nav group right after "New session" and before
-    // the "Inbox" row. Compare document order. (The search box now renders
-    // above this nav group upstream, so we anchor to New session + Inbox — the
+    // the "Needs You" row. Compare document order. (The search box now renders
+    // above this nav group upstream, so we anchor to New session + Needs You — the
     // two items actually adjacent to Scheduled — rather than the search box.)
     const newSession = screen.getByTestId("new-chat-button");
     const inbox = screen.getByTestId("inbox-button");
@@ -454,7 +476,7 @@ describe("Sidebar session list", () => {
     renderSidebar(true, "/tasks");
 
     // Active/selected state uses the SAME shared active-highlight as the sibling
-    // nav rows (New session / Inbox) — the `--sidebar-active` pill, not an
+    // nav rows (New session / Needs You) — the `--sidebar-active` pill, not an
     // ad-hoc bg-muted.
     expect(screen.getByTestId("scheduled-tasks-nav").className).toContain(
       "bg-[var(--sidebar-active)]",

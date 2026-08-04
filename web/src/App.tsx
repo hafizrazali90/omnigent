@@ -155,6 +155,7 @@ function App({ basename }: AppProps = {}) {
         <Route element={<AppShell />}>
           <Route path={prefix || "/"} element={<ChatPage />} />
           <Route path={`${prefix}/c/:conversationId`} element={<ChatPage />} />
+          <Route path={`${prefix}/needs-you`} element={<InboxPage />} />
           <Route path={`${prefix}/inbox`} element={<InboxPage />} />
           <Route path={`${prefix}/tasks`} element={<TasksPage />} />
           <Route path={`${prefix}/control-room`} element={<ControlRoomPage />} />

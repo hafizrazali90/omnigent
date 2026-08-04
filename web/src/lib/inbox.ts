@@ -68,6 +68,45 @@ export function collectInboxItems(sources: InboxSource[]): InboxItem[] {
   return items;
 }
 
+export type SessionAttentionKind = "failed" | "completed";
+
+/** A top-level session whose latest state genuinely needs the viewer's attention. */
+export interface SessionAttentionItem {
+  row: Conversation;
+  kind: SessionAttentionKind;
+}
+
+/**
+ * Build the non-approval session side of Needs You.
+ *
+ * Failed sessions remain visible until their status changes or they are
+ * archived. Completed sessions qualify only when the shared read-state model says
+ * their latest finished turn is unseen. Approval-owning sessions are excluded
+ * because their actionable approval card already represents the same task.
+ */
+export function collectSessionAttention(
+  rows: Conversation[],
+  isUnseen: (row: Conversation) => boolean,
+): SessionAttentionItem[] {
+  const items: SessionAttentionItem[] = [];
+  for (const row of rows) {
+    if (row.archived || row.parent_session_id) continue;
+    if ((row.pending_elicitations_count ?? 0) > 0) continue;
+    if (row.status === "failed") {
+      items.push({ row, kind: "failed" });
+      continue;
+    }
+    if (row.status === "idle" && isUnseen(row)) {
+      items.push({ row, kind: "completed" });
+    }
+  }
+  items.sort(
+    (a, b) =>
+      (a.kind === b.kind ? 0 : a.kind === "failed" ? -1 : 1) || b.row.updated_at - a.row.updated_at,
+  );
+  return items;
+}
+
 /** One unseen file comment, paired with the session that owns it. */
 export interface CommentInboxItem {
   /** Sidebar row of the session the comment belongs to (see `InboxItem.row`). */

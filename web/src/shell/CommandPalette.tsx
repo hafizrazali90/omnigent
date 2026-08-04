@@ -130,10 +130,10 @@ export function CommandPalette({
       },
       {
         id: "go-inbox",
-        label: "Go to Inbox",
+        label: "Go to Needs You",
         icon: InboxIcon,
-        keywords: ["notifications", "comments", "needs response"],
-        run: () => navigate("/inbox"),
+        keywords: ["inbox", "notifications", "comments", "needs response", "failed", "completed"],
+        run: () => navigate("/needs-you"),
       },
       {
         id: "go-tasks",

@@ -71,6 +71,35 @@ def test_mark_unread_lights_the_dot_and_persists_across_reload(
     expect(_unread_dot(_row(page, session_id))).to_be_visible()
 
 
+def test_unseen_completed_session_surfaces_in_needs_you_and_clears_when_opened(
+    page: Page,
+    seeded_session: tuple[str, str],
+) -> None:
+    """An unseen finished task appears in Needs You until the user opens it."""
+    base_url, session_id = seeded_session
+
+    page.goto(f"{base_url}/c/{session_id}")
+    row = _row(page, session_id)
+    expect(row).to_be_visible()
+    row.hover()
+    row.get_by_test_id("conversation-actions").click()
+    page.get_by_test_id("mark-unread-conversation").click()
+    expect(_unread_dot(row)).to_be_visible()
+
+    page.goto(f"{base_url}/needs-you")
+    card = page.locator('[data-testid="needs-you-session"][data-kind="completed"]')
+    expect(card).to_be_visible()
+    expect(card.get_by_text("Completed since you last looked")).to_be_visible()
+    open_task = card.get_by_role("link", name="Open task")
+    expect(open_task).to_have_attribute("href", f"/c/{session_id}")
+
+    open_task.click()
+    expect(page).to_have_url(f"{base_url}/c/{session_id}")
+    page.goto(f"{base_url}/needs-you")
+    expect(card).to_have_count(0)
+    expect(page.get_by_text("Nothing needs you right now")).to_be_visible()
+
+
 def test_unread_dot_survives_reload_from_localStorage_when_server_seed_is_empty(
     page: Page,
     seeded_session: tuple[str, str],

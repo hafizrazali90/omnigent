@@ -629,10 +629,10 @@ describe("useIdleNotifications badge (native shell)", () => {
     setWindowFocused(false);
     setConversations([unseenConv("a"), unseenConv("b")]);
     renderHook(() => useIdleNotifications("a"));
-    // Both unread (finished, none awaiting) -> badge 2, routed to the list.
+    // Both unread (finished, none awaiting) -> badge 2, routed to Needs You.
     expect(setBadgeMock).toHaveBeenLastCalledWith(
       2,
-      expect.objectContaining({ navigatePath: "/?sidebar=open" }),
+      expect.objectContaining({ navigatePath: "/needs-you" }),
     );
     setBadgeMock.mockClear();
 
@@ -659,26 +659,25 @@ describe("useIdleNotifications badge (native shell)", () => {
     });
   });
 
-  it("routes a multi-session badge to the session list when none await input", () => {
-    // Both merely finished (unseen activity, no pending prompt) -> the inbox
-    // would read "Nothing waiting on you", so route to the session list;
-    // ?sidebar=open makes phone-width shells actually show it.
+  it("routes a multi-session badge to Needs You when none await input", () => {
+    // Both merely finished (unseen activity, no pending prompt) and are now
+    // represented directly by Needs You's completed-work cards.
     setConversations([unseenConv("a"), unseenConv("b")]);
     renderHook(() => useIdleNotifications());
 
     expect(setBadgeMock).toHaveBeenCalledWith(2, {
-      navigatePath: "/?sidebar=open",
+      navigatePath: "/needs-you",
       body: "2 sessions need your attention",
     });
   });
 
   it("routes a multi-session badge to the inbox when a session awaits input", () => {
-    // 'a' has a pending prompt, so /inbox will actually list something.
+    // 'a' has a pending prompt, so /needs-you will actually list something.
     setConversations([conv("a", "running", 1), unseenConv("b")]);
     renderHook(() => useIdleNotifications());
 
     expect(setBadgeMock).toHaveBeenCalledWith(2, {
-      navigatePath: "/inbox",
+      navigatePath: "/needs-you",
       body: "2 sessions need your attention",
     });
   });

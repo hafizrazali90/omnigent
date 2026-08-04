@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Comment } from "@/hooks/useComments";
 import type { Conversation } from "@/hooks/useConversations";
-import { collectCommentInboxItems, collectInboxItems, sumPendingApprovals } from "./inbox";
+import {
+  collectCommentInboxItems,
+  collectInboxItems,
+  collectSessionAttention,
+  sumPendingApprovals,
+} from "./inbox";
 
 function makeRow(overrides: Partial<Conversation> & { id: string }): Conversation {
   return {
@@ -119,6 +124,41 @@ describe("collectInboxItems", () => {
     ]);
 
     expect(items.map((i) => i.elicitation.elicitationId)).toEqual(["elicit_new", "elicit_old"]);
+  });
+});
+
+describe("collectSessionAttention", () => {
+  it("surfaces failed work before unseen completed work, newest first within each kind", () => {
+    const rows = [
+      makeRow({ id: "complete_old", status: "idle", updated_at: 2_000 }),
+      makeRow({ id: "failed_old", status: "failed", updated_at: 3_000 }),
+      makeRow({ id: "complete_new", status: "idle", updated_at: 5_000 }),
+      makeRow({ id: "failed_new", status: "failed", updated_at: 4_000 }),
+    ];
+
+    const items = collectSessionAttention(rows, () => true);
+
+    expect(items.map((item) => [item.kind, item.row.id])).toEqual([
+      ["failed", "failed_new"],
+      ["failed", "failed_old"],
+      ["completed", "complete_new"],
+      ["completed", "complete_old"],
+    ]);
+  });
+
+  it("excludes running, seen, archived, child, and approval-owning sessions", () => {
+    const rows = [
+      makeRow({ id: "running", status: "running" }),
+      makeRow({ id: "seen", status: "idle" }),
+      makeRow({ id: "archived", status: "failed", archived: true }),
+      makeRow({ id: "child", status: "failed", parent_session_id: "parent" }),
+      makeRow({ id: "approval", status: "failed", pending_elicitations_count: 1 }),
+      makeRow({ id: "complete", status: "idle" }),
+    ];
+
+    const items = collectSessionAttention(rows, (row) => row.id !== "seen");
+
+    expect(items.map((item) => item.row.id)).toEqual(["complete"]);
   });
 });
 
