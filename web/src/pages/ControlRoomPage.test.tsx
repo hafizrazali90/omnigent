@@ -1,11 +1,13 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ControlRoomPage } from "./ControlRoomPage";
 import * as conversationsHook from "@/hooks/useConversations";
+import * as controlRoomLaneHook from "@/hooks/useControlRoomLane";
 import type { Conversation } from "@/hooks/useConversations";
 
 vi.mock("@/hooks/useConversations", () => ({ useConversations: vi.fn() }));
+vi.mock("@/hooks/useControlRoomLane", () => ({ useControlRoomLane: vi.fn() }));
 
 function conversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -45,6 +47,18 @@ function renderPage() {
   );
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(controlRoomLaneHook.useControlRoomLane).mockReturnValue({
+    messages: [],
+    isLoadingMessages: false,
+    messagesError: null,
+    isSending: false,
+    sendError: null,
+    send: vi.fn(),
+  });
+});
+
 afterEach(() => cleanup());
 
 describe("ControlRoomPage", () => {
@@ -78,6 +92,44 @@ describe("ControlRoomPage", () => {
     renderPage();
 
     expect(screen.getByRole("link", { name: /Open task/i })).toHaveAttribute("href", "/c/conv_1");
+  });
+
+  it("shows each lane's own transcript and sends only through that lane", async () => {
+    const sendAlpha = vi.fn().mockResolvedValue(undefined);
+    const sendBeta = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(controlRoomLaneHook.useControlRoomLane).mockImplementation((sessionId) => ({
+      messages: [
+        {
+          id: `${sessionId}_message`,
+          role: "assistant",
+          text: sessionId === "conv_1" ? "Alpha transcript" : "Beta transcript",
+        },
+      ],
+      isLoadingMessages: false,
+      messagesError: null,
+      isSending: false,
+      sendError: null,
+      send: sessionId === "conv_1" ? sendAlpha : sendBeta,
+    }));
+    setQuery([
+      conversation(),
+      conversation({ id: "conv_2", title: "CRM release review", status: "idle" }),
+    ]);
+
+    renderPage();
+
+    const lanes = screen.getAllByTestId("control-room-lane");
+    expect(within(lanes[0]).getByText("Alpha transcript")).toBeInTheDocument();
+    expect(within(lanes[1]).getByText("Beta transcript")).toBeInTheDocument();
+
+    fireEvent.change(
+      within(lanes[0]).getByRole("textbox", { name: "Reply to Review payment safeguards" }),
+      { target: { value: "Continue only alpha" } },
+    );
+    fireEvent.click(within(lanes[0]).getByRole("button", { name: "Send reply" }));
+
+    expect(sendAlpha).toHaveBeenCalledWith("Continue only alpha");
+    expect(sendBeta).not.toHaveBeenCalled();
   });
 
   it("shows the loading state", () => {

@@ -1,9 +1,9 @@
-"""UI journey: compare real sessions in the Control Room and enter one.
+"""UI journey: reply across real Control Room sessions and enter one.
 
 The sessions are created through Omnigent's real API and rendered through the
-real ``GET /v1/sessions`` path. The test then follows the Control Room link into
-the unchanged conversation workspace, proving that the overview is an additive
-entry point rather than a replacement chat implementation.
+real ``GET /v1/sessions`` path. The test sends a different reply from each lane,
+proves the server stored each reply under only its intended session, then follows
+the Control Room link into the unchanged conversation workspace.
 """
 
 from __future__ import annotations
@@ -21,7 +21,28 @@ def _title_session(base_url: str, session_id: str, title: str) -> None:
     response.raise_for_status()
 
 
-def test_control_room_renders_real_sessions_and_opens_original_workspace(
+def _user_message_texts(base_url: str, session_id: str) -> list[str]:
+    response = httpx.get(
+        f"{base_url}/v1/sessions/{session_id}/items",
+        params={"limit": 20, "order": "desc"},
+        timeout=10.0,
+    )
+    response.raise_for_status()
+    texts: list[str] = []
+    for item in response.json()["data"]:
+        if item.get("type") != "message" or item.get("role") != "user":
+            continue
+        texts.append(
+            "".join(
+                block.get("text", "")
+                for block in item.get("content", [])
+                if block.get("type") == "input_text"
+            )
+        )
+    return texts
+
+
+def test_control_room_replies_stay_in_their_sessions_and_open_original_workspace(
     page: Page,
     seeded_session_pair: tuple[str, str, str],
 ) -> None:
@@ -34,9 +55,34 @@ def test_control_room_renders_real_sessions_and_opens_original_workspace(
     expect(page.get_by_role("heading", name="Control Room")).to_be_visible(timeout=30_000)
     lanes = page.get_by_test_id("control-room-lane")
     expect(lanes).to_have_count(2, timeout=30_000)
-    expect(lanes.filter(has_text="Review payment safeguards")).to_be_visible()
+    payment_lane = lanes.filter(has_text="Review payment safeguards")
+    expect(payment_lane).to_be_visible()
     crm_lane = lanes.filter(has_text="Prepare CRM release")
     expect(crm_lane).to_be_visible()
+
+    payment_reply = "Continue only the payment review"
+    crm_reply = "Continue only the CRM release"
+    payment_lane.get_by_role("textbox", name="Reply to Review payment safeguards").fill(
+        payment_reply
+    )
+    payment_lane.get_by_role("button", name="Send reply").click()
+    crm_lane.get_by_role("textbox", name="Reply to Prepare CRM release").fill(crm_reply)
+    crm_lane.get_by_role("button", name="Send reply").click()
+
+    payment_transcript = payment_lane.get_by_test_id("control-room-lane-transcript")
+    crm_transcript = crm_lane.get_by_test_id("control-room-lane-transcript")
+    expect(payment_transcript.get_by_text(payment_reply, exact=True)).to_be_visible(timeout=30_000)
+    expect(crm_transcript.get_by_text(crm_reply, exact=True)).to_be_visible(timeout=30_000)
+    expect(payment_transcript.get_by_text(crm_reply, exact=True)).to_have_count(0)
+    expect(crm_transcript.get_by_text(payment_reply, exact=True)).to_have_count(0)
+
+    payment_texts = _user_message_texts(base_url, session_a)
+    crm_texts = _user_message_texts(base_url, session_b)
+    assert payment_reply in payment_texts
+    assert crm_reply not in payment_texts
+    assert crm_reply in crm_texts
+    assert payment_reply not in crm_texts
+
     crm_lane.get_by_role("link", name="Open task").click()
     expect(page).to_have_url(f"{base_url}/c/{session_b}")
     expect(page.get_by_label("Message the agent")).to_be_visible(timeout=30_000)
