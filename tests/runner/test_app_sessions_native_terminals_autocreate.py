@@ -1038,6 +1038,8 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
         **gateway_env,
         "ENABLE_TOOL_SEARCH": "true",
         "CLAUDE_CODE_DISABLE_AGENT_VIEW": "1",
+        "OMNIGENT_SESSION_ID": "13efa494411f3ae60211e6be5635062a",
+        "OMNIGENT_SERVER_URL": "http://127.0.0.1:8000",
     }
     assert spec.command == "claude"
     # The gateway default model is applied (no per-session override here).

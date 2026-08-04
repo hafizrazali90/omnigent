@@ -601,6 +601,8 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
     assert launched.env["OPENAI_API_KEY"] == "sk-test"
     assert "IGNORED" not in launched.env
     assert launched.env["CODEX_HOME"] == str(app_server.codex_home)
+    assert launched.env["OMNIGENT_SESSION_ID"] == session_id
+    assert launched.env["OMNIGENT_SERVER_URL"] == "http://ap.example"
     assert launched.tmux_start_on_attach is False
     assert launched.tmux_allow_passthrough is True
     assert preload_calls == [

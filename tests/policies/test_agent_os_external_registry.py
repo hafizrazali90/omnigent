@@ -62,7 +62,15 @@ def test_external_adapter_builds_as_an_independent_installable_wheel(tmp_path: P
         names = set(archive.namelist())
     assert "sifututor_agent_os_omnigent/__init__.py" in names
     assert "sifututor_agent_os_omnigent/continuity.py" in names
+    assert "sifututor_agent_os_omnigent/linking.py" in names
     assert "sifututor_agent_os_omnigent/policy.py" in names
+    entry_points = next(name for name in names if name.endswith(".dist-info/entry_points.txt"))
+    with zipfile.ZipFile(wheels[0]) as archive:
+        entry_point_text = archive.read(entry_points).decode("utf-8")
+    assert (
+        "agent-os-link-continuity = sifututor_agent_os_omnigent.linking:main"
+        in entry_point_text
+    )
 
     env = {**os.environ, "PYTHONPATH": str(wheels[0])}
     imported = subprocess.run(

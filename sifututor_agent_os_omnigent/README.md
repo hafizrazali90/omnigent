@@ -48,6 +48,23 @@ guesses from the most recently edited map, so parallel tasks cannot inherit one
 another's context. The existing Markdown files remain the owners; the adapter
 does not create or update task state.
 
+After the task router has created or selected one exact Session Map, link it to
+the current native chat with:
+
+```bash
+agent-os-link-continuity \
+  .agent-os/session-maps/current-work.md \
+  --workspace-root /absolute/path/to/Sifututor
+```
+
+Omnigent supplies the current chat id and server address to native Claude and
+Codex sessions as non-secret environment coordinates. The helper accepts no
+session-id argument, validates the map before making any request, and changes
+only the current chat's `agent_os.session_map` label. Invalid, missing,
+absolute, traversal, and outside-root paths fail before any chat metadata is
+written. Authenticated multi-user servers still enforce their normal session
+edit permission on the metadata request.
+
 Do not use the legacy top-level `handler` plus `factory_params` spelling for
 this server-wide policy. Omnigent 0.8 accepts that spelling but currently drops
 the factory arguments when it builds the live policy engine.

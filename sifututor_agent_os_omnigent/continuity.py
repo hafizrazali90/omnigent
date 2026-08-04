@@ -68,6 +68,23 @@ def _selected_session_map(
     return path, path.read_text(encoding="utf-8")
 
 
+def validate_session_map_pointer(
+    workspace_root: Path,
+    session_map: str,
+    *,
+    session_map_glob: str = _SESSION_MAP_GLOB,
+) -> str:
+    """Return a safe source-relative pointer to an existing Session Map."""
+    root = workspace_root.expanduser().resolve()
+    pattern = _safe_pattern(session_map_glob, _SESSION_MAP_GLOB)
+    if pattern is None:
+        raise ValueError("Session Map pattern must stay inside the workspace root")
+    selected = _selected_session_map(root, session_map, pattern)
+    if selected is None:
+        raise ValueError("session_map must name an exact Agent OS Session Map")
+    return str(selected[0].relative_to(root))
+
+
 def _mission_follow_ups(root: Path, pattern: str) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     for path in sorted(_matching_files(root, pattern)):
@@ -166,4 +183,8 @@ def create_extension_routers(
     return [(router, "/v1/agent-os", ["agent-os"])]
 
 
-__all__ = ["build_continuity_snapshot", "create_extension_routers"]
+__all__ = [
+    "build_continuity_snapshot",
+    "create_extension_routers",
+    "validate_session_map_pointer",
+]

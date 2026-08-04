@@ -53,6 +53,7 @@ from omnigent.native_coding_agents import (
     native_coding_agent_for_terminal_name,
 )
 from omnigent.native_dispatch import resolve_hook
+from omnigent.native_session_env import native_session_env
 from omnigent.runner.resource_registry import (
     ANTIGRAVITY_NATIVE_TERMINAL_ROLE,
     CLAUDE_NATIVE_TERMINAL_ROLE,
@@ -3839,7 +3840,10 @@ async def _auto_create_codex_terminal(
                         or app_server.codex_cli_version >= _MIN_BYPASS_HOOK_TRUST_CODEX_VERSION
                     ),
                 ),
-                env=codex_terminal_env(app_server),
+                env={
+                    **codex_terminal_env(app_server),
+                    **native_session_env(session_id, launch_config.policy_server_url),
+                },
                 # Match the local ``omnigent codex`` terminal scrollback.
                 scrollback=100_000,
                 # Enable tmux passthrough so the Codex TUI's escape sequences
@@ -5978,7 +5982,10 @@ async def _auto_create_claude_terminal(
         # Tool Search env plus ucode gateway env (ANTHROPIC_BASE_URL
         # etc.) when derived. Empty provider config still forces
         # ENABLE_TOOL_SEARCH=true so MCP schemas are loaded on demand.
-        env=build_native_claude_terminal_env(claude_config),
+        env={
+            **build_native_claude_terminal_env(claude_config),
+            **native_session_env(session_id, server_url),
+        },
         # Names to strip (see ``_claude_terminal_env_unset``). Dropping
         # ``DATABRICKS_CONFIG_PROFILE`` matters because Claude's MCP servers
         # inherit this env and several build ``WorkspaceClient`` without pinning

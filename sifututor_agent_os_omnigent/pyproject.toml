@@ -9,6 +9,9 @@ description = "Sifututor Agent OS policy adapter for Omnigent"
 requires-python = ">=3.12"
 dependencies = ["fastapi>=0.115", "omnigent>=0.7.0,<0.9"]
 
+[project.scripts]
+agent-os-link-continuity = "sifututor_agent_os_omnigent.linking:main"
+
 [tool.setuptools]
 packages = ["sifututor_agent_os_omnigent"]
 package-dir = { sifututor_agent_os_omnigent = "." }

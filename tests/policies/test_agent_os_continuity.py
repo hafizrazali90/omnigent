@@ -1,14 +1,19 @@
 """Read-only Agent OS continuity adapter tests."""
 
+import json
 from pathlib import Path
 
+import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from sifututor_agent_os_omnigent import linking
 from sifututor_agent_os_omnigent.continuity import (
     build_continuity_snapshot,
     create_extension_routers,
 )
+from sifututor_agent_os_omnigent.linking import link_current_session
 
 
 def _write_sources(root: Path) -> None:
@@ -186,3 +191,120 @@ def test_continuity_route_rejects_a_map_outside_the_owned_directory(tmp_path: Pa
     )
 
     assert response.status_code == 400
+
+
+def test_link_current_session_validates_then_updates_only_the_current_chat(
+    tmp_path: Path,
+) -> None:
+    _write_sources(tmp_path)
+    session_map = tmp_path / ".agent-os" / "session-maps" / "current.md"
+    ledger = tmp_path / "docs" / "agent-playbooks" / "mission-ledger" / "cross-project.md"
+    before = (session_map.read_bytes(), ledger.read_bytes())
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.method == "PATCH"
+        assert request.url.path == "/v1/sessions/conv_current"
+        assert request.content == (
+            b'{"labels":{"agent_os.session_map":".agent-os/session-maps/current.md"}}'
+        )
+        return httpx.Response(
+            200,
+            json={
+                "id": "conv_current",
+                "labels": {
+                    "agent_os.session_map": ".agent-os/session-maps/current.md",
+                },
+            },
+        )
+
+    result = link_current_session(
+        workspace_root=tmp_path,
+        session_map=".agent-os/session-maps/current.md",
+        session_id="conv_current",
+        server_url="http://omnigent.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert result == ".agent-os/session-maps/current.md"
+    assert len(requests) == 1
+    assert (session_map.read_bytes(), ledger.read_bytes()) == before
+
+
+@pytest.mark.parametrize(
+    "session_map",
+    [
+        "../private.md",
+        "/tmp/private.md",
+        ".agent-os/session-maps/missing.md",
+    ],
+)
+def test_link_current_session_fails_closed_before_any_metadata_write(
+    tmp_path: Path,
+    session_map: str,
+) -> None:
+    _write_sources(tmp_path)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("invalid Session Map must not reach Omnigent")
+
+    with pytest.raises(ValueError, match=r"Session Map|session_map"):
+        link_current_session(
+            workspace_root=tmp_path,
+            session_map=session_map,
+            session_id="conv_current",
+            server_url="http://omnigent.test",
+            transport=httpx.MockTransport(handler),
+        )
+
+
+def test_link_current_session_requires_omnigent_owned_identity(
+    tmp_path: Path,
+) -> None:
+    _write_sources(tmp_path)
+
+    with pytest.raises(ValueError, match="current Omnigent session"):
+        link_current_session(
+            workspace_root=tmp_path,
+            session_map=".agent-os/session-maps/current.md",
+            session_id="",
+            server_url="http://omnigent.test",
+        )
+
+
+def test_link_cli_uses_omnigent_owned_environment_coordinates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_sources(tmp_path)
+    captured: dict[str, object] = {}
+
+    def fake_link(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return ".agent-os/session-maps/current.md"
+
+    monkeypatch.setenv("OMNIGENT_SESSION_ID", "conv_current")
+    monkeypatch.setenv("OMNIGENT_SERVER_URL", "http://omnigent.test")
+    monkeypatch.setattr(linking, "link_current_session", fake_link)
+
+    result = linking.main(
+        [
+            ".agent-os/session-maps/current.md",
+            "--workspace-root",
+            str(tmp_path),
+        ]
+    )
+
+    assert result == 0
+    assert captured == {
+        "workspace_root": tmp_path,
+        "session_map": ".agent-os/session-maps/current.md",
+        "session_id": "conv_current",
+        "server_url": "http://omnigent.test",
+    }
+    assert json.loads(capsys.readouterr().out) == {
+        "linked": True,
+        "session_map": ".agent-os/session-maps/current.md",
+    }
