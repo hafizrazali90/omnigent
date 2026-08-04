@@ -340,6 +340,7 @@ function TaskUnderstandingCard({
   const {
     project: initialProject,
     workflow: initialWorkflow,
+    finishLine: initialFinishLine,
     status: initialStatus,
     question: initialQuestion,
     source: initialSource,
@@ -347,6 +348,7 @@ function TaskUnderstandingCard({
   const initialSignature = [
     initialProject,
     initialWorkflow,
+    initialFinishLine,
     initialStatus,
     initialQuestion,
     initialSource,
@@ -357,6 +359,7 @@ function TaskUnderstandingCard({
   const [editing, setEditing] = useState(false);
   const [project, setProject] = useState(initialUnderstanding.project);
   const [workflow, setWorkflow] = useState(initialUnderstanding.workflow);
+  const [finishLine, setFinishLine] = useState(initialUnderstanding.finishLine);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -367,14 +370,17 @@ function TaskUnderstandingCard({
     setUnderstanding({
       project: initialProject,
       workflow: initialWorkflow,
+      finishLine: initialFinishLine,
       status: initialStatus,
       question: initialQuestion,
       source: initialSource,
     });
     setProject(initialProject);
     setWorkflow(initialWorkflow);
+    setFinishLine(initialFinishLine);
   }, [
     editing,
+    initialFinishLine,
     initialProject,
     initialQuestion,
     initialSignature,
@@ -387,19 +393,21 @@ function TaskUnderstandingCard({
   async function saveCorrection() {
     const nextProject = project.trim();
     const nextWorkflow = workflow.trim();
-    if (!nextProject || !nextWorkflow) {
-      setError("Project and workflow are both required.");
+    const nextFinishLine = finishLine.trim();
+    if (!nextProject || !nextWorkflow || !nextFinishLine) {
+      setError("Project, workflow, and finish line are all required.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const labels = correctedUnderstandingLabels(nextProject, nextWorkflow);
+      const labels = correctedUnderstandingLabels(nextProject, nextWorkflow, nextFinishLine);
       const updatedSession = await updateSession(sessionId, { labels });
       queryClient.setQueryData(["session", sessionId], updatedSession);
       setUnderstanding({
         project: nextProject,
         workflow: nextWorkflow,
+        finishLine: nextFinishLine,
         status: "confirmed",
         question: "",
         source: "user-corrected",
@@ -415,7 +423,8 @@ function TaskUnderstandingCard({
                 type: "input_text",
                 text:
                   `[Agent OS route correction] Project: ${nextProject}. ` +
-                  `Workflow: ${nextWorkflow}. Use this corrected route for the current task.`,
+                  `Workflow: ${nextWorkflow}. Finish line: ${nextFinishLine}. ` +
+                  `Use this corrected route and finish line for the current task.`,
               },
             ],
           },
@@ -478,6 +487,15 @@ function TaskUnderstandingCard({
               className="mt-1 h-7 text-xs"
             />
           </label>
+          <label className="block text-[10px] font-medium text-muted-foreground">
+            Finish line
+            <Input
+              value={finishLine}
+              maxLength={180}
+              onChange={(event) => setFinishLine(event.target.value)}
+              className="mt-1 h-7 text-xs"
+            />
+          </label>
           {error && <p className="text-[10px] text-destructive">{error}</p>}
           <div className="flex justify-end gap-1">
             <Button
@@ -488,6 +506,7 @@ function TaskUnderstandingCard({
               onClick={() => {
                 setProject(understanding.project);
                 setWorkflow(understanding.workflow);
+                setFinishLine(understanding.finishLine);
                 setEditing(false);
                 setError(null);
               }}
@@ -506,6 +525,10 @@ function TaskUnderstandingCard({
             <dd className="font-medium text-foreground/85">{understanding.project}</dd>
             <dt className="text-muted-foreground">Workflow</dt>
             <dd className="font-medium text-foreground/85">{understanding.workflow}</dd>
+            <dt className="text-muted-foreground">Finish line</dt>
+            <dd className="font-medium text-foreground/85">
+              {understanding.finishLine || "Not set"}
+            </dd>
           </dl>
           {understanding.status === "needs-clarification" && (
             <div className="mt-2 rounded border border-warning/25 bg-warning/5 px-2 py-1.5">

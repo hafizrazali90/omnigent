@@ -71,7 +71,8 @@ understanding visible in the same native chat before delegating work:
 ```bash
 agent-os-set-understanding \
   --project ripple-suite \
-  --workflow review
+  --workflow review \
+  --finish-line "PR opened"
 ```
 
 If choosing the wrong route could materially change the work, preserve the
@@ -81,12 +82,14 @@ uncertainty and one short question instead of silently guessing:
 agent-os-set-understanding \
   --project umbrella \
   --workflow triage \
+  --finish-line "Route confirmed" \
   --question "Which product should this change?"
 ```
 
-The helper changes only the current chat's bounded `agent_os.*` route labels.
-The Worker Sidebar shows the result and lets the current user correct it
-without changing the original request or creating another task record.
+The helper changes only the current chat's bounded `agent_os.*` understanding
+labels. The Worker Sidebar shows the project, workflow, and practical finish
+line and lets the current user correct them without changing the original
+request or creating another task record.
 
 Do not use the legacy top-level `handler` plus `factory_params` spelling for
 this server-wide policy. Omnigent 0.8 accepts that spelling but currently drops

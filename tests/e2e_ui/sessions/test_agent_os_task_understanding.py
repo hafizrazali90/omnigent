@@ -23,6 +23,8 @@ def test_focused_task_shows_and_corrects_its_agent_os_understanding(
             "labels": {
                 "agent_os.project": "ripple-suite",
                 "agent_os.workflow": "review",
+                "agent_os.finish_line": "PR opened",
+                "agent_os.finish_line_source": "orchestrator",
                 "agent_os.route_status": "understood",
                 "agent_os.route_question": "",
                 "agent_os.route_source": "orchestrator",
@@ -44,14 +46,17 @@ def test_focused_task_shows_and_corrects_its_agent_os_understanding(
     expect(understanding).to_be_visible()
     expect(understanding.get_by_text("ripple-suite", exact=True)).to_be_visible()
     expect(understanding.get_by_text("review", exact=True)).to_be_visible()
+    expect(understanding.get_by_text("PR opened", exact=True)).to_be_visible()
 
     understanding.get_by_role("button", name="Correct understanding").click()
     understanding.get_by_label("Project").fill("sifu-tutor")
     understanding.get_by_label("Workflow").fill("bugfix")
+    understanding.get_by_label("Finish line").fill("Production monitored")
     understanding.get_by_role("button", name="Save correction").click()
 
     expect(understanding.get_by_text("sifu-tutor", exact=True)).to_be_visible()
     expect(understanding.get_by_text("bugfix", exact=True)).to_be_visible()
+    expect(understanding.get_by_text("Production monitored", exact=True)).to_be_visible()
     expect(understanding.get_by_text("Corrected by you", exact=True)).to_be_visible()
     page.screenshot(path=str(tmp_path / "agent-os-task-understanding.png"), full_page=True)
 
@@ -60,5 +65,7 @@ def test_focused_task_shows_and_corrects_its_agent_os_understanding(
     labels = saved.json()["labels"]
     assert labels["agent_os.project"] == "sifu-tutor"
     assert labels["agent_os.workflow"] == "bugfix"
+    assert labels["agent_os.finish_line"] == "Production monitored"
+    assert labels["agent_os.finish_line_source"] == "user-corrected"
     assert labels["agent_os.route_status"] == "confirmed"
     assert labels["agent_os.route_source"] == "user-corrected"

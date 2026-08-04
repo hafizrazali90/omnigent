@@ -316,6 +316,8 @@ describe("SubagentsPanel", () => {
         labels: {
           "agent_os.project": "ripple-suite",
           "agent_os.workflow": "review",
+          "agent_os.finish_line": "PR opened",
+          "agent_os.finish_line_source": "orchestrator",
           "agent_os.route_status": "understood",
           "agent_os.route_question": "",
           "agent_os.route_source": "orchestrator",
@@ -338,6 +340,7 @@ describe("SubagentsPanel", () => {
     const understanding = screen.getByTestId("agent-os-task-understanding");
     expect(within(understanding).getByText("ripple-suite")).toBeInTheDocument();
     expect(within(understanding).getByText("review")).toBeInTheDocument();
+    expect(within(understanding).getByText("PR opened")).toBeInTheDocument();
 
     fireEvent.click(within(understanding).getByRole("button", { name: "Correct understanding" }));
     fireEvent.change(within(understanding).getByLabelText("Project"), {
@@ -346,6 +349,9 @@ describe("SubagentsPanel", () => {
     fireEvent.change(within(understanding).getByLabelText("Workflow"), {
       target: { value: "bugfix" },
     });
+    fireEvent.change(within(understanding).getByLabelText("Finish line"), {
+      target: { value: "Production monitored" },
+    });
     fireEvent.click(within(understanding).getByRole("button", { name: "Save correction" }));
 
     await waitFor(() =>
@@ -353,6 +359,8 @@ describe("SubagentsPanel", () => {
         labels: {
           "agent_os.project": "sifu-tutor",
           "agent_os.workflow": "bugfix",
+          "agent_os.finish_line": "Production monitored",
+          "agent_os.finish_line_source": "user-corrected",
           "agent_os.route_status": "confirmed",
           "agent_os.route_question": "",
           "agent_os.route_source": "user-corrected",
@@ -361,6 +369,7 @@ describe("SubagentsPanel", () => {
     );
     expect(within(understanding).getByText("sifu-tutor")).toBeInTheDocument();
     expect(within(understanding).getByText("bugfix")).toBeInTheDocument();
+    expect(within(understanding).getByText("Production monitored")).toBeInTheDocument();
     expect(within(understanding).getByText("Corrected by you")).toBeInTheDocument();
     expect(postEventMock).toHaveBeenCalledWith("conv_root", {
       type: "message",
@@ -371,7 +380,8 @@ describe("SubagentsPanel", () => {
             type: "input_text",
             text:
               "[Agent OS route correction] Project: sifu-tutor. " +
-              "Workflow: bugfix. Use this corrected route for the current task.",
+              "Workflow: bugfix. Finish line: Production monitored. " +
+              "Use this corrected route and finish line for the current task.",
           },
         ],
       },

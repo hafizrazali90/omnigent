@@ -17,6 +17,7 @@ from .linking import (
 )
 
 _MAX_ROUTE_VALUE = 120
+_MAX_FINISH_LINE = 180
 _MAX_QUESTION = 240
 
 
@@ -33,6 +34,7 @@ def set_current_session_understanding(
     *,
     project: str,
     workflow: str,
+    finish_line: str,
     question: str,
     session_id: str,
     server_url: str,
@@ -44,12 +46,17 @@ def set_current_session_understanding(
         raise ValueError("current Omnigent session identity is unavailable")
     route_project = _bounded_value(project, name="project", limit=_MAX_ROUTE_VALUE)
     route_workflow = _bounded_value(workflow, name="workflow", limit=_MAX_ROUTE_VALUE)
+    route_finish_line = _bounded_value(
+        finish_line, name="finish line", limit=_MAX_FINISH_LINE
+    )
     route_question = " ".join(question.split())
     if len(route_question) > _MAX_QUESTION:
         raise ValueError(f"question must be {_MAX_QUESTION} characters or fewer")
     labels = {
         "agent_os.project": route_project,
         "agent_os.workflow": route_workflow,
+        "agent_os.finish_line": route_finish_line,
+        "agent_os.finish_line_source": "orchestrator",
         "agent_os.route_status": (
             "needs-clarification" if route_question else "understood"
         ),
@@ -81,6 +88,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--project", required=True, help="Detected project or workspace")
     parser.add_argument("--workflow", required=True, help="Detected Agent OS workflow")
     parser.add_argument(
+        "--finish-line",
+        required=True,
+        help="Concise practical outcome that counts as done",
+    )
+    parser.add_argument(
         "--question",
         default="",
         help="One clarification question when the route is materially ambiguous",
@@ -97,6 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     labels = set_current_session_understanding(
         project=args.project,
         workflow=args.workflow,
+        finish_line=args.finish_line,
         question=args.question,
         session_id=session_id,
         server_url=server_url,
@@ -107,6 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "updated": True,
                 "project": labels["agent_os.project"],
                 "workflow": labels["agent_os.workflow"],
+                "finish_line": labels["agent_os.finish_line"],
                 "status": labels["agent_os.route_status"],
             }
         )
