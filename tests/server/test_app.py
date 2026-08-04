@@ -10,10 +10,11 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from omnigent.native_coding_agents import (
     ANTIGRAVITY_NATIVE_AGENT_NAME,
@@ -1205,3 +1206,45 @@ def test_load_debug_routers_collects_entries() -> None:
     _router, prefix, tags = entries[0]
     assert prefix == "/debug"
     assert tags == ["debug"]
+
+
+# ── extension router loading (out-of-tree product adapters) ──────────
+
+
+def test_load_extension_routers_none_and_empty() -> None:
+    """No configured modules → no routers, no error."""
+    assert server_app._load_extension_routers(None, {}) == []
+    assert server_app._load_extension_routers([], {}) == []
+
+
+def test_load_extension_routers_missing_module_is_skipped() -> None:
+    """An unavailable optional adapter must not prevent the server from booting."""
+    assert server_app._load_extension_routers(["nope.not.a.real.module"], {}) == []
+
+
+def test_load_extension_routers_requires_factory() -> None:
+    """A module without the explicit extension-router factory is ignored."""
+    assert server_app._load_extension_routers(["json"], {}) == []
+
+
+def test_load_extension_routers_passes_server_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The external module receives configuration but no internal server stores."""
+    router = APIRouter()
+    observed: dict[str, object] = {}
+
+    def create_extension_routers(
+        config: dict[str, object],
+    ) -> list[tuple[APIRouter, str, list[str]]]:
+        observed.update(config)
+        return [(router, "/v1/example", ["example"])]
+
+    module = SimpleNamespace(create_extension_routers=create_extension_routers)
+    monkeypatch.setattr(server_app, "import_module", lambda _path: module)
+
+    entries = server_app._load_extension_routers(
+        ["example.adapter"],
+        {"example": {"enabled": True}},
+    )
+
+    assert observed == {"example": {"enabled": True}}
+    assert entries == [(router, "/v1/example", ["example"])]

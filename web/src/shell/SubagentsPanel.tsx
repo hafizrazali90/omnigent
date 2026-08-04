@@ -29,6 +29,7 @@ import {
   FileTextIcon,
   FlaskConicalIcon,
   GitCompareArrowsIcon,
+  GoalIcon,
   ListIcon,
   ListTodoIcon,
   NetworkIcon,
@@ -56,6 +57,7 @@ import { Button } from "@/components/ui/button";
 import { RunningDot } from "@/components/RunningDot";
 import { MAX_TREE_DEPTH, useChildSessions, type ChildSessionInfo } from "@/hooks/useChildSessions";
 import { useSession } from "@/hooks/useSession";
+import { useAgentOsContinuity, type AgentOsContinuity } from "@/hooks/useAgentOsContinuity";
 import type { SessionItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -222,6 +224,7 @@ function WorkerSidebarSummary({
   directWorkers: ChildSessionInfo[];
   changedCount: number;
 }) {
+  const { data: continuity } = useAgentOsContinuity(session?.labels?.["agent_os.session_map"]);
   const nativeAgent = nativeCodingAgentForWrapper(session?.labels?.[WRAPPER_LABEL_KEY]);
   const workerName =
     nativeAgent?.displayName ?? session?.subAgentName ?? session?.agentName ?? "Agent";
@@ -294,10 +297,68 @@ function WorkerSidebarSummary({
         </p>
       </div>
 
+      {continuity && <ContinuitySummary continuity={continuity} />}
+
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium">Workers</p>
         <span className="text-[10px] text-muted-foreground">Live session tree</span>
       </div>
+    </section>
+  );
+}
+
+function ContinuitySummary({ continuity }: { continuity: AgentOsContinuity }) {
+  const hasSnapshot = continuity.goal || continuity.now || continuity.next;
+  if (!hasSnapshot && continuity.follow_up_count === 0) return null;
+
+  return (
+    <section
+      data-testid="agent-os-continuity"
+      className="rounded-md border border-border bg-background/55 px-2.5 py-2"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          <GoalIcon className="size-3.5" />
+          Continuity
+        </p>
+        <span className="text-[10px] text-muted-foreground">Live from Agent OS</span>
+      </div>
+      <dl className="mt-2 space-y-2 text-[11px] leading-relaxed">
+        {continuity.goal && (
+          <div>
+            <dt className="font-medium text-muted-foreground">Goal</dt>
+            <dd className="text-foreground/85">{continuity.goal}</dd>
+          </div>
+        )}
+        {continuity.now && (
+          <div>
+            <dt className="font-medium text-muted-foreground">Now</dt>
+            <dd className="text-foreground/85">{continuity.now}</dd>
+          </div>
+        )}
+        {continuity.next && (
+          <div>
+            <dt className="font-medium text-muted-foreground">Next</dt>
+            <dd className="text-foreground/85">{continuity.next}</dd>
+          </div>
+        )}
+      </dl>
+      {continuity.follow_up_count > 0 && (
+        <details className="mt-2 border-t border-border pt-2 text-[11px]">
+          <summary className="cursor-pointer font-medium text-muted-foreground">
+            {continuity.follow_up_count} remembered{" "}
+            {continuity.follow_up_count === 1 ? "follow-up" : "follow-ups"}
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {continuity.follow_ups.slice(0, 3).map((followUp) => (
+              <li key={followUp.id}>
+                <p className="font-medium text-foreground/85">{followUp.title}</p>
+                <p className="text-muted-foreground">{followUp.next_action}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </section>
   );
 }

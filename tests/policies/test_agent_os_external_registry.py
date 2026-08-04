@@ -61,6 +61,7 @@ def test_external_adapter_builds_as_an_independent_installable_wheel(tmp_path: P
     with zipfile.ZipFile(wheels[0]) as archive:
         names = set(archive.namelist())
     assert "sifututor_agent_os_omnigent/__init__.py" in names
+    assert "sifututor_agent_os_omnigent/continuity.py" in names
     assert "sifututor_agent_os_omnigent/policy.py" in names
 
     env = {**os.environ, "PYTHONPATH": str(wheels[0])}

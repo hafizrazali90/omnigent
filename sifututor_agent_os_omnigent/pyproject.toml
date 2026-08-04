@@ -7,7 +7,7 @@ name = "sifututor-agent-os-omnigent"
 version = "0.1.0"
 description = "Sifututor Agent OS policy adapter for Omnigent"
 requires-python = ">=3.12"
-dependencies = ["omnigent>=0.7.0,<0.9"]
+dependencies = ["fastapi>=0.115", "omnigent>=0.7.0,<0.9"]
 
 [tool.setuptools]
 packages = ["sifututor_agent_os_omnigent"]

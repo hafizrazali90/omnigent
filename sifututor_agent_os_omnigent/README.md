@@ -20,6 +20,12 @@ receives its required roots and guard path:
 policy_modules:
   - sifututor_agent_os_omnigent.policy
 
+extension_router_modules:
+  - sifututor_agent_os_omnigent.continuity
+
+agent_os_continuity:
+  workspace_root: /absolute/path/to/Sifututor
+
 policies:
   agent_os_workflow_guard:
     type: function
@@ -32,6 +38,15 @@ policies:
         workspace_root: /absolute/path/to/Sifututor
         guard_command_path: /absolute/path/to/Sifututor/scripts/agent-checks/pre-commit-guard.sh
 ```
+
+The continuity route is read-only. Each Agent OS chat labels itself with its
+source-relative Session Map (for example,
+`agent_os.session_map=.agent-os/session-maps/current-work.md`). The route
+revalidates that pointer against the configured Session Map glob and rereads
+that exact map plus unresolved Mission Ledger items on every request. It never
+guesses from the most recently edited map, so parallel tasks cannot inherit one
+another's context. The existing Markdown files remain the owners; the adapter
+does not create or update task state.
 
 Do not use the legacy top-level `handler` plus `factory_params` spelling for
 this server-wide policy. Omnigent 0.8 accepts that spelling but currently drops

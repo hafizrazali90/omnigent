@@ -315,6 +315,47 @@ def _load_debug_routers(
     return routers
 
 
+def _load_extension_routers(
+    module_paths: list[str] | None,
+    server_config: dict[str, Any],
+) -> list[tuple[Any, str, list[str]]]:
+    """Load opt-in routers supplied by installed product adapters.
+
+    Each module exposes ``create_extension_routers(server_config)`` and returns
+    ``(router, prefix, tags)`` tuples. The module receives configuration only;
+    Omnigent's stores and authentication internals are not exposed as a plugin
+    API. Missing optional adapters are skipped so a portable config can still
+    boot on machines where the adapter is not installed.
+    """
+    routers: list[tuple[Any, str, list[str]]] = []
+    for module_path in module_paths or []:
+        try:
+            mod = import_module(module_path)
+        except ImportError:
+            _logger.warning(
+                "Failed to import extension router module %s; skipping",
+                module_path,
+                exc_info=True,
+            )
+            continue
+        factory = getattr(mod, "create_extension_routers", None)
+        if not callable(factory):
+            _logger.warning(
+                "Module %s has no create_extension_routers factory; skipping",
+                module_path,
+            )
+            continue
+        entries = factory(server_config)
+        if not isinstance(entries, list):
+            _logger.warning(
+                "Extension router module %s returned a non-list; skipping",
+                module_path,
+            )
+            continue
+        routers.extend(entries)
+    return routers
+
+
 # MCP startup warming moved to runner; see designs/RUNNER_MCP.md.
 
 
@@ -749,6 +790,7 @@ def create_app(
     account_store: Any | None = None,  # SqlAlchemyAccountStore — accounts mode only
     extra_routers: list[tuple[Any, str, list[str]]] | None = None,
     policy_modules: list[str] | None = None,
+    extension_router_modules: list[str] | None = None,
     debug_router_modules: list[str] | None = None,
     admins: list[str] | None = None,
     allowed_domains: list[str] | None = None,
@@ -806,6 +848,10 @@ def create_app(
         ``["myorg.policies.safety"]``. Sourced from the server
         config's ``policy_modules`` key. ``None`` scans only
         the built-in modules.
+    :param extension_router_modules: Optional installed product adapters that
+        expose ``create_extension_routers(server_config)``. These routers are
+        mounted before the SPA and receive configuration only, keeping
+        organization-specific read models outside the core server package.
     :param debug_router_modules: Dotted module paths to import and
         scan for a ``DEBUG_ROUTERS`` list of ``(router, prefix,
         tags)`` tuples, mounted alongside ``extra_routers``. Sourced
@@ -2459,6 +2505,9 @@ def create_app(
     # module path from config. Registered BEFORE the SPA static-files
     # mount so FastAPI resolves them before the catch-all fallback.
     all_extra_routers = list(extra_routers or [])
+    all_extra_routers.extend(
+        _load_extension_routers(extension_router_modules, server_config or {})
+    )
     all_extra_routers.extend(_load_debug_routers(debug_router_modules))
     for router, prefix, tags in all_extra_routers:
         app.include_router(router, prefix=prefix, tags=[*tags])

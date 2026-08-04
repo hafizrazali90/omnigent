@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OttoIcon } from "@/components/icons/OttoIcon";
 import { type ChildSessionInfo, useChildSessions } from "@/hooks/useChildSessions";
 import { useSession } from "@/hooks/useSession";
+import { useAgentOsContinuity } from "@/hooks/useAgentOsContinuity";
 import { iconForAgentType, SubagentsPanel } from "./SubagentsPanel";
 
 vi.mock("@/hooks/useChildSessions", async (importOriginal) => ({
@@ -26,6 +27,10 @@ vi.mock("@/hooks/useChildSessions", async (importOriginal) => ({
 
 vi.mock("@/hooks/useSession", () => ({
   useSession: vi.fn(),
+}));
+
+vi.mock("@/hooks/useAgentOsContinuity", () => ({
+  useAgentOsContinuity: vi.fn(),
 }));
 
 // Stub the brand logos with plain SVGs so jsdom doesn't have to resolve
@@ -54,6 +59,7 @@ vi.mock("@/components/icons/OttoIcon", () => ({
 
 const useChildSessionsMock = vi.mocked(useChildSessions);
 const useSessionMock = vi.mocked(useSession);
+const useAgentOsContinuityMock = vi.mocked(useAgentOsContinuity);
 
 interface RenderOptions {
   /** The conversation in main — used only for active-row highlighting. */
@@ -145,6 +151,12 @@ const ICON_CASES: [string | null, ReturnType<typeof iconForAgentType>][] = [
 beforeEach(() => {
   useChildSessionsMock.mockReset();
   useSessionMock.mockReset();
+  useAgentOsContinuityMock.mockReset();
+  useAgentOsContinuityMock.mockReturnValue({
+    data: null,
+    isLoading: false,
+    isError: false,
+  } as ReturnType<typeof useAgentOsContinuity>);
   // Default: parent's status is idle. Tests override per-case.
   useSessionMock.mockReturnValue({
     session: {
@@ -229,6 +241,44 @@ describe("SubagentsPanel", () => {
     expect(
       within(summary).getByText("Commit, push, and deploy still require your approval."),
     ).toBeInTheDocument();
+  });
+
+  it("shows live Agent OS continuity without replacing the task or worker state", () => {
+    useChildSessionsMock.mockReturnValue({ children: [], isLoading: false, error: null });
+    useAgentOsContinuityMock.mockReturnValue({
+      data: {
+        object: "agent_os.continuity",
+        goal: "One place to run and remember development work.",
+        now: "Building the continuity bridge.",
+        next: "Prove it against the real records.",
+        decision_needed: "No.",
+        session_map: ".agent-os/session-maps/current.md",
+        follow_up_count: 2,
+        follow_ups: [
+          {
+            id: "AO-LATER-001",
+            title: "Telegram access",
+            status: "paused",
+            project: "cross-project",
+            next_action: "Resume after the desktop workflow is stable.",
+            source: "docs/agent-playbooks/mission-ledger/cross-project.md",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useAgentOsContinuity>);
+
+    renderPanel();
+
+    const continuity = screen.getByTestId("agent-os-continuity");
+    expect(
+      within(continuity).getByText("One place to run and remember development work."),
+    ).toBeInTheDocument();
+    expect(within(continuity).getByText("Building the continuity bridge.")).toBeInTheDocument();
+    expect(within(continuity).getByText("Prove it against the real records.")).toBeInTheDocument();
+    expect(within(continuity).getByText("2 remembered follow-ups")).toBeInTheDocument();
+    expect(screen.getByTestId("worker-sidebar-summary")).toBeInTheDocument();
   });
 
   it("always renders a 'main' row linking to the root session", () => {

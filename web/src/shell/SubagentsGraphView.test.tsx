@@ -41,6 +41,10 @@ vi.mock("@/hooks/useSession", () => ({
   useSession: vi.fn(),
 }));
 
+vi.mock("@/hooks/useAgentOsContinuity", () => ({
+  useAgentOsContinuity: () => ({ data: null, isLoading: false, isError: false }),
+}));
+
 vi.mock("@/components/icons/ClaudeIcon", () => ({
   ClaudeIcon: (props: Record<string, unknown>) => <svg {...props} data-icon="claude" />,
 }));
