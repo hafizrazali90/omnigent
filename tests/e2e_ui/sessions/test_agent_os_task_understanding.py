@@ -25,6 +25,9 @@ def test_focused_task_shows_and_corrects_its_agent_os_understanding(
                 "agent_os.workflow": "review",
                 "agent_os.finish_line": "PR opened",
                 "agent_os.finish_line_source": "orchestrator",
+                "agent_os.proven_state": "Pushed branch; no PR",
+                "agent_os.proven_state_evidence": "Remote SHA abc123 matches local",
+                "agent_os.proven_state_source": "orchestrator",
                 "agent_os.route_status": "understood",
                 "agent_os.route_question": "",
                 "agent_os.route_source": "orchestrator",
@@ -47,6 +50,10 @@ def test_focused_task_shows_and_corrects_its_agent_os_understanding(
     expect(understanding.get_by_text("ripple-suite", exact=True)).to_be_visible()
     expect(understanding.get_by_text("review", exact=True)).to_be_visible()
     expect(understanding.get_by_text("PR opened", exact=True)).to_be_visible()
+    expect(understanding.get_by_text("Pushed branch; no PR", exact=True)).to_be_visible()
+    expect(
+        understanding.get_by_text("Remote SHA abc123 matches local", exact=True)
+    ).to_be_visible()
 
     understanding.get_by_role("button", name="Correct understanding").click()
     understanding.get_by_label("Project").fill("sifu-tutor")

@@ -344,6 +344,8 @@ function TaskUnderstandingCard({
     status: initialStatus,
     question: initialQuestion,
     source: initialSource,
+    provenState: initialProvenState,
+    provenStateEvidence: initialProvenStateEvidence,
   } = initialUnderstanding;
   const initialSignature = [
     initialProject,
@@ -352,6 +354,8 @@ function TaskUnderstandingCard({
     initialStatus,
     initialQuestion,
     initialSource,
+    initialProvenState,
+    initialProvenStateEvidence,
   ].join("\u0000");
   const lastInitialSignature = useRef(initialSignature);
   const [understanding, setUnderstanding] =
@@ -374,6 +378,8 @@ function TaskUnderstandingCard({
       status: initialStatus,
       question: initialQuestion,
       source: initialSource,
+      provenState: initialProvenState,
+      provenStateEvidence: initialProvenStateEvidence,
     });
     setProject(initialProject);
     setWorkflow(initialWorkflow);
@@ -385,6 +391,8 @@ function TaskUnderstandingCard({
     initialQuestion,
     initialSignature,
     initialSource,
+    initialProvenState,
+    initialProvenStateEvidence,
     initialStatus,
     initialWorkflow,
     saving,
@@ -411,6 +419,8 @@ function TaskUnderstandingCard({
         status: "confirmed",
         question: "",
         source: "user-corrected",
+        provenState: understanding.provenState,
+        provenStateEvidence: understanding.provenStateEvidence,
       });
       setEditing(false);
       try {
@@ -543,6 +553,21 @@ function TaskUnderstandingCard({
           )}
           {error && <p className="mt-1 text-[10px] text-destructive">{error}</p>}
         </>
+      )}
+      {understanding.provenState && (
+        <div className="mt-2 border-t border-border/70 pt-2">
+          <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            Current proof
+          </p>
+          <p className="mt-1 text-[11px] font-medium text-foreground/85">
+            {understanding.provenState}
+          </p>
+          {understanding.provenStateEvidence && (
+            <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+              {understanding.provenStateEvidence}
+            </p>
+          )}
+        </div>
       )}
     </section>
   );

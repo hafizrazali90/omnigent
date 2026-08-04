@@ -5,6 +5,8 @@ export const AGENT_OS_FINISH_LINE_SOURCE_LABEL = "agent_os.finish_line_source";
 export const AGENT_OS_ROUTE_STATUS_LABEL = "agent_os.route_status";
 export const AGENT_OS_ROUTE_QUESTION_LABEL = "agent_os.route_question";
 export const AGENT_OS_ROUTE_SOURCE_LABEL = "agent_os.route_source";
+export const AGENT_OS_PROVEN_STATE_LABEL = "agent_os.proven_state";
+export const AGENT_OS_PROVEN_STATE_EVIDENCE_LABEL = "agent_os.proven_state_evidence";
 
 export interface AgentOsTaskUnderstanding {
   project: string;
@@ -13,6 +15,8 @@ export interface AgentOsTaskUnderstanding {
   status: string;
   question: string;
   source: string;
+  provenState: string;
+  provenStateEvidence: string;
 }
 
 export function agentOsUnderstandingFromLabels(
@@ -28,6 +32,8 @@ export function agentOsUnderstandingFromLabels(
     status: labels?.[AGENT_OS_ROUTE_STATUS_LABEL]?.trim() || "understood",
     question: labels?.[AGENT_OS_ROUTE_QUESTION_LABEL]?.trim() || "",
     source: labels?.[AGENT_OS_ROUTE_SOURCE_LABEL]?.trim() || "orchestrator",
+    provenState: labels?.[AGENT_OS_PROVEN_STATE_LABEL]?.trim() || "",
+    provenStateEvidence: labels?.[AGENT_OS_PROVEN_STATE_EVIDENCE_LABEL]?.trim() || "",
   };
 }
 

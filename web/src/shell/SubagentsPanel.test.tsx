@@ -318,6 +318,9 @@ describe("SubagentsPanel", () => {
           "agent_os.workflow": "review",
           "agent_os.finish_line": "PR opened",
           "agent_os.finish_line_source": "orchestrator",
+          "agent_os.proven_state": "Pushed branch; no PR",
+          "agent_os.proven_state_evidence": "Remote SHA abc123 matches local",
+          "agent_os.proven_state_source": "orchestrator",
           "agent_os.route_status": "understood",
           "agent_os.route_question": "",
           "agent_os.route_source": "orchestrator",
@@ -341,6 +344,8 @@ describe("SubagentsPanel", () => {
     expect(within(understanding).getByText("ripple-suite")).toBeInTheDocument();
     expect(within(understanding).getByText("review")).toBeInTheDocument();
     expect(within(understanding).getByText("PR opened")).toBeInTheDocument();
+    expect(within(understanding).getByText("Pushed branch; no PR")).toBeInTheDocument();
+    expect(within(understanding).getByText("Remote SHA abc123 matches local")).toBeInTheDocument();
 
     fireEvent.click(within(understanding).getByRole("button", { name: "Correct understanding" }));
     fireEvent.change(within(understanding).getByLabelText("Project"), {

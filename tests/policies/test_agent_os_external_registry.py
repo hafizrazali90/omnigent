@@ -64,6 +64,7 @@ def test_external_adapter_builds_as_an_independent_installable_wheel(tmp_path: P
     assert "sifututor_agent_os_omnigent/continuity.py" in names
     assert "sifututor_agent_os_omnigent/linking.py" in names
     assert "sifututor_agent_os_omnigent/policy.py" in names
+    assert "sifututor_agent_os_omnigent/state.py" in names
     assert "sifututor_agent_os_omnigent/understanding.py" in names
     entry_points = next(name for name in names if name.endswith(".dist-info/entry_points.txt"))
     with zipfile.ZipFile(wheels[0]) as archive:
@@ -74,6 +75,10 @@ def test_external_adapter_builds_as_an_independent_installable_wheel(tmp_path: P
     )
     assert (
         "agent-os-set-understanding = sifututor_agent_os_omnigent.understanding:main"
+        in entry_point_text
+    )
+    assert (
+        "agent-os-set-proven-state = sifututor_agent_os_omnigent.state:main"
         in entry_point_text
     )
 

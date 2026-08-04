@@ -91,6 +91,19 @@ labels. The Worker Sidebar shows the project, workflow, and practical finish
 line and lets the current user correct them without changing the original
 request or creating another task record.
 
+At meaningful state changes, record the strongest state that fresh evidence
+actually proves:
+
+```bash
+agent-os-set-proven-state \
+  --state "Pushed branch; no PR" \
+  --evidence "Remote SHA abc123 matches local"
+```
+
+This updates only the current chat. The Worker Sidebar keeps the finish line
+and current proof visibly separate; the evidence note is a compact pointer,
+not a substitute for checking Git, GitHub, deploy, QA, or monitoring sources.
+
 Do not use the legacy top-level `handler` plus `factory_params` spelling for
 this server-wide policy. Omnigent 0.8 accepts that spelling but currently drops
 the factory arguments when it builds the live policy engine.
