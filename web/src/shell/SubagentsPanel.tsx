@@ -310,6 +310,16 @@ function WorkerSidebarSummary({
 function ContinuitySummary({ continuity }: { continuity: AgentOsContinuity }) {
   const hasSnapshot = continuity.goal || continuity.now || continuity.next;
   if (!hasSnapshot && continuity.follow_up_count === 0) return null;
+  const sourceUpdatedAt = continuity.source_updated_at
+    ? new Date(continuity.source_updated_at)
+    : null;
+  const sourceUpdatedLabel =
+    sourceUpdatedAt && !Number.isNaN(sourceUpdatedAt.getTime())
+      ? sourceUpdatedAt.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : null;
 
   return (
     <section
@@ -343,6 +353,14 @@ function ContinuitySummary({ continuity }: { continuity: AgentOsContinuity }) {
           </div>
         )}
       </dl>
+      {sourceUpdatedLabel && (
+        <time
+          dateTime={continuity.source_updated_at ?? undefined}
+          className="mt-2 block text-[10px] text-muted-foreground"
+        >
+          Source updated {sourceUpdatedLabel}
+        </time>
+      )}
       {continuity.follow_up_count > 0 && (
         <details className="mt-2 border-t border-border pt-2 text-[11px]">
           <summary className="cursor-pointer font-medium text-muted-foreground">

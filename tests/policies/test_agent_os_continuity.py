@@ -1,6 +1,7 @@
 """Read-only Agent OS continuity adapter tests."""
 
 import json
+import os
 from pathlib import Path
 
 import httpx
@@ -122,7 +123,23 @@ def test_build_continuity_snapshot_reads_sources_without_copying_done_work(tmp_p
     assert snapshot["follow_ups"][0]["next_action"] == (
         "Resume after the desktop workflow is stable."
     )
+    assert isinstance(snapshot["source_updated_at"], str)
     assert (session_map.read_bytes(), ledger.read_bytes()) == before
+
+
+def test_continuity_freshness_tracks_the_exact_map_and_ledger_sources(tmp_path: Path) -> None:
+    _write_sources(tmp_path)
+    session_map = tmp_path / ".agent-os" / "session-maps" / "current.md"
+    ledger = tmp_path / "docs" / "agent-playbooks" / "mission-ledger" / "cross-project.md"
+    os.utime(session_map, (1_700_000_000, 1_700_000_000))
+    os.utime(ledger, (1_710_000_000, 1_710_000_000))
+
+    snapshot = build_continuity_snapshot(
+        tmp_path,
+        session_map=".agent-os/session-maps/current.md",
+    )
+
+    assert snapshot["source_updated_at"] == "2024-03-09T16:00:00Z"
 
 
 def test_create_extension_routers_is_opt_in_and_rejects_outside_root(tmp_path: Path) -> None:

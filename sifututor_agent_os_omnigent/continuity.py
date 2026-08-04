@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -85,9 +86,9 @@ def validate_session_map_pointer(
     return str(selected[0].relative_to(root))
 
 
-def _mission_follow_ups(root: Path, pattern: str) -> list[dict[str, str]]:
+def _mission_follow_ups(root: Path, files: list[Path]) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
-    for path in sorted(_matching_files(root, pattern)):
+    for path in files:
         markdown = path.read_text(encoding="utf-8")
         headings = list(
             re.finditer(
@@ -118,6 +119,18 @@ def _mission_follow_ups(root: Path, pattern: str) -> list[dict[str, str]]:
     )
 
 
+def _source_updated_at(current: tuple[Path, str] | None, ledgers: list[Path]) -> str | None:
+    paths = [*([] if current is None else [current[0]]), *ledgers]
+    if not paths:
+        return None
+    modified_at = max(path.stat().st_mtime for path in paths)
+    return (
+        datetime.fromtimestamp(modified_at, tz=timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
+
 def build_continuity_snapshot(
     workspace_root: Path,
     *,
@@ -130,7 +143,8 @@ def build_continuity_snapshot(
     current = _selected_session_map(root, session_map, session_map_glob)
     markdown = current[1] if current is not None else ""
     snapshot = _human_snapshot(markdown)
-    follow_ups = _mission_follow_ups(root, mission_ledger_glob)
+    ledger_files = sorted(_matching_files(root, mission_ledger_glob))
+    follow_ups = _mission_follow_ups(root, ledger_files)
     return {
         "object": "agent_os.continuity",
         "goal": _field(snapshot, "Started because"),
@@ -138,6 +152,7 @@ def build_continuity_snapshot(
         "next": _field(snapshot, "Next recommended move"),
         "decision_needed": _field(snapshot, "Decision needed from Hafiz"),
         "session_map": str(current[0].relative_to(root)) if current is not None else None,
+        "source_updated_at": _source_updated_at(current, ledger_files),
         "follow_up_count": len(follow_ups),
         "follow_ups": follow_ups[:12],
     }

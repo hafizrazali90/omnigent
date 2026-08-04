@@ -19,6 +19,7 @@ function wrapper({ children }: PropsWithChildren) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -75,5 +76,38 @@ describe("useAgentOsContinuity", () => {
 
     expect(result.current.fetchStatus).toBe("idle");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the exact linked map while the focused task stays open", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          object: "agent_os.continuity",
+          goal: "Keep the task current",
+          now: "Fresh state",
+          next: "Continue",
+          decision_needed: "No",
+          session_map: ".agent-os/session-maps/current.md",
+          source_updated_at: "2026-08-04T05:30:00Z",
+          follow_up_count: 0,
+          follow_ups: [],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHook(() => useAgentOsContinuity(".agent-os/session-maps/current.md"), { wrapper });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    for (const call of fetchMock.mock.calls) {
+      expect(call[0]).toBe(
+        "/v1/agent-os/continuity?session_map=.agent-os%2Fsession-maps%2Fcurrent.md",
+      );
+    }
   });
 });

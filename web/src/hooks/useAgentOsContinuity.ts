@@ -17,6 +17,7 @@ export interface AgentOsContinuity {
   next: string | null;
   decision_needed: string | null;
   session_map: string | null;
+  source_updated_at: string | null;
   follow_up_count: number;
   follow_ups: AgentOsFollowUp[];
 }
@@ -40,6 +41,8 @@ export function useAgentOsContinuity(sessionMap: string | null | undefined) {
     queryFn: () => fetchAgentOsContinuity(sessionMap as string),
     enabled: Boolean(sessionMap),
     staleTime: 30_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     retry: false,
   });

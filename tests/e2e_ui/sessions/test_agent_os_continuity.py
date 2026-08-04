@@ -28,7 +28,11 @@ def test_focused_task_reads_only_its_linked_session_map(
     )
     response.raise_for_status()
 
+    continuity_reads = 0
+
     def _continuity(route: Route) -> None:
+        nonlocal continuity_reads
+        continuity_reads += 1
         query = parse_qs(urlparse(route.request.url).query)
         assert query == {"session_map": [_SESSION_MAP]}
         route.fulfill(
@@ -38,10 +42,19 @@ def test_focused_task_reads_only_its_linked_session_map(
                 {
                     "object": "agent_os.continuity",
                     "goal": "One place to run and remember development work.",
-                    "now": "The continuity bridge is connected to this task.",
+                    "now": (
+                        "The continuity bridge is connected to this task."
+                        if continuity_reads == 1
+                        else "The same task picked up its refreshed Session Map."
+                    ),
                     "next": "Verify the original records remain unchanged.",
                     "decision_needed": "No.",
                     "session_map": _SESSION_MAP,
+                    "source_updated_at": (
+                        "2026-08-04T05:30:00Z"
+                        if continuity_reads == 1
+                        else "2026-08-04T05:31:00Z"
+                    ),
                     "follow_up_count": 1,
                     "follow_ups": [
                         {
@@ -78,6 +91,13 @@ def test_focused_task_reads_only_its_linked_session_map(
             exact=True,
         )
     ).to_be_visible()
+    expect(continuity.get_by_text("Source updated", exact=False)).to_be_visible()
+    expect(
+        continuity.get_by_text(
+            "The same task picked up its refreshed Session Map.",
+            exact=True,
+        )
+    ).to_be_visible(timeout=20_000)
     expect(continuity.get_by_text("1 remembered follow-up", exact=True)).to_be_visible()
     continuity.get_by_text("1 remembered follow-up", exact=True).click()
     expect(continuity.get_by_text("Telegram access", exact=True)).to_be_visible()

@@ -253,6 +253,7 @@ describe("SubagentsPanel", () => {
         next: "Prove it against the real records.",
         decision_needed: "No.",
         session_map: ".agent-os/session-maps/current.md",
+        source_updated_at: "2026-08-04T05:30:00Z",
         follow_up_count: 2,
         follow_ups: [
           {
@@ -277,6 +278,10 @@ describe("SubagentsPanel", () => {
     ).toBeInTheDocument();
     expect(within(continuity).getByText("Building the continuity bridge.")).toBeInTheDocument();
     expect(within(continuity).getByText("Prove it against the real records.")).toBeInTheDocument();
+    expect(within(continuity).getByText(/Source updated/)).toHaveAttribute(
+      "datetime",
+      "2026-08-04T05:30:00Z",
+    );
     expect(within(continuity).getByText("2 remembered follow-ups")).toBeInTheDocument();
     expect(screen.getByTestId("worker-sidebar-summary")).toBeInTheDocument();
   });
