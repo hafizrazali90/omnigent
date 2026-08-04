@@ -117,9 +117,12 @@ describe("SplitFocusPage", () => {
       "/c/conv_gamma?split-pane=1",
     );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Workspace 1" }), {
-      target: { value: "conv_delta" },
+    fireEvent.pointerDown(screen.getByRole("combobox", { name: "Workspace 1" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
     });
+    fireEvent.click(screen.getByRole("option", { name: "Write staff guide" }));
     expect(screen.getAllByTitle(/Task workspace:/)[0]).toHaveAttribute(
       "src",
       "/c/conv_delta?split-pane=1",
@@ -159,8 +162,14 @@ describe("SplitFocusPage", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search Split Focus tasks" }), {
       target: { value: "mobile" },
     });
+    fireEvent.pointerDown(screen.getByRole("combobox", { name: "Workspace 1" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
     expect(screen.getAllByRole("option", { name: "Check mobile readiness" })).not.toHaveLength(0);
-    expect(screen.queryAllByRole("option", { name: "Prepare CRM release" })).toHaveLength(1);
+    expect(screen.queryAllByRole("option", { name: "Prepare CRM release" })).toHaveLength(0);
+    fireEvent.click(screen.getByRole("option", { name: "Check mobile readiness" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Load more tasks" }));
     expect(fetchNextPage).toHaveBeenCalledOnce();
@@ -170,7 +179,7 @@ describe("SplitFocusPage", () => {
     setSessions([]);
     renderPage();
 
-    expect(screen.getByText("No tasks available for Split Focus")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Start a session" })).toHaveAttribute("href", "/");
+    expect(screen.getByText("No sessions yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New session" })).toHaveAttribute("href", "/");
   });
 });

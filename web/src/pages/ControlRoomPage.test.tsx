@@ -156,12 +156,18 @@ describe("ControlRoomPage", () => {
 
     renderPage();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Visible columns" }), {
-      target: { value: "2" },
+    fireEvent.pointerDown(screen.getByRole("combobox", { name: "Visible columns" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Density" }), {
-      target: { value: "compact" },
+    fireEvent.click(screen.getByRole("option", { name: "2" }));
+    fireEvent.pointerDown(screen.getByRole("combobox", { name: "Density" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
     });
+    fireEvent.click(screen.getByRole("option", { name: "Compact" }));
     expect(screen.getByTestId("control-room-lanes")).toHaveAttribute("data-columns", "2");
     expect(screen.getByTestId("control-room-lanes")).toHaveAttribute("data-density", "compact");
 
@@ -223,22 +229,22 @@ describe("ControlRoomPage", () => {
   it("shows the loading state", () => {
     setQuery([], { isLoading: true });
     renderPage();
-    expect(screen.getByText("Loading your active work…")).toBeInTheDocument();
+    expect(screen.getByText("Loading sessions…")).toBeInTheDocument();
   });
 
   it("shows an actionable load error", () => {
     const refetch = vi.fn();
     setQuery([], { isError: true, refetch });
     renderPage();
-    screen.getByRole("button", { name: "Try again" }).click();
-    expect(screen.getByRole("alert")).toHaveTextContent("Couldn’t load your sessions");
+    screen.getByRole("button", { name: "Retry" }).click();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn’t load sessions.");
     expect(refetch).toHaveBeenCalledOnce();
   });
 
   it("shows a useful empty state", () => {
     setQuery([]);
     renderPage();
-    expect(screen.getByText("No active tasks yet")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Start a session" })).toHaveAttribute("href", "/");
+    expect(screen.getByText("No sessions yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New session" })).toHaveAttribute("href", "/");
   });
 });

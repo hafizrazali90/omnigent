@@ -403,7 +403,7 @@ describe("InboxPage comments and errors", () => {
     renderPage();
 
     const banner = await screen.findByTestId("inbox-load-error");
-    expect(within(banner).getByText(/Couldn.t load inbox items from 2/)).toBeInTheDocument();
+    expect(within(banner).getByText(/Couldn.t load items from 2/)).toBeInTheDocument();
     fireEvent.click(within(banner).getByRole("button", { name: /Retry/ }));
     expect(retryFailed).toHaveBeenCalled();
     // The error path also suppresses the empty state.

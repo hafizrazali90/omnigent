@@ -67,8 +67,12 @@ def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
 
     page.goto(f"{base_url}/control-room")
     expect(page.get_by_role("heading", name="Control Room")).to_be_visible(timeout=30_000)
+    expect(
+        page.get_by_text("View and continue your active sessions in one place.", exact=True)
+    ).to_be_visible()
+    expect(page.get_by_text("Agent OS workspace", exact=True)).to_have_count(0)
     expect(page.get_by_role("searchbox", name="Search tasks")).to_be_visible()
-    expect(page.get_by_role("combobox", name="Visible columns")).to_have_value("4")
+    expect(page.get_by_role("combobox", name="Visible columns")).to_contain_text("4")
     payment_lane = page.get_by_test_id("control-room-lane").filter(
         has_text="Review payment safeguards"
     )
@@ -94,6 +98,10 @@ def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
 
     page.goto(f"{base_url}/split-focus?session={session_a}&session={session_b}")
     expect(page.get_by_role("heading", name="Split Focus")).to_be_visible(timeout=30_000)
+    expect(
+        page.get_by_text("Work with multiple sessions side by side.", exact=True)
+    ).to_be_visible()
+    expect(page.get_by_text("Agent OS workspace", exact=True)).to_have_count(0)
     expect(page.get_by_role("searchbox", name="Search Split Focus tasks")).to_be_visible()
     expect(page.get_by_test_id("split-focus-pane")).to_have_count(2)
     expect(
@@ -110,3 +118,9 @@ def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
 
     page.goto(f"{base_url}/needs-you")
     expect(page.get_by_role("heading", name="Needs You")).to_be_visible(timeout=30_000)
+    expect(
+        page.get_by_text(
+            "Review approvals, stopped sessions, completed work, and comments.",
+            exact=True,
+        )
+    ).to_be_visible()
