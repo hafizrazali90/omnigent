@@ -6640,6 +6640,28 @@ def test_resolve_native_claude_config_subscription_uses_cli_login(
     assert cfg is None
 
 
+def test_resolve_native_claude_config_logged_in_cli_beats_ambient_key(
+    _isolated_provider_config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A working Claude subscription must not be shadowed by an ambient key.
+
+    Native Claude inherits the host environment, so a stale
+    ``ANTHROPIC_API_KEY`` can coexist with a healthy Claude CLI login. With no
+    explicit provider choice, the official CLI subscription is the safer and
+    user-selected route: returning ``None`` leaves Claude's own login intact
+    instead of injecting the ambient key through ``apiKeyHelper``.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-stale")
+    monkeypatch.setattr(
+        "omnigent.onboarding.ambient._claude_login_detected",
+        lambda: True,
+    )
+
+    cfg = claude_native.resolve_native_claude_config(spec=_no_auth_claude_spec())
+
+    assert cfg is None
+
+
 def test_resolve_native_claude_config_global_databricks_auth_uses_ucode(
     _isolated_provider_config: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -6704,6 +6726,10 @@ def test_resolve_native_claude_config_ambient_key(
     native Claude would ignore the ambient credential.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-ambient")
+    monkeypatch.setattr(
+        "omnigent.onboarding.ambient._claude_login_detected",
+        lambda: False,
+    )
 
     cfg = claude_native.resolve_native_claude_config(spec=None)
     assert cfg is not None
@@ -6718,6 +6744,10 @@ def test_resolve_native_claude_config_ambient_prefixed_key(
     """A prefixed Anthropic key routes native Claude without raw env exposure."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("OMNIGENT_ANTHROPIC_API_KEY", "sk-ant-prefixed")
+    monkeypatch.setattr(
+        "omnigent.onboarding.ambient._claude_login_detected",
+        lambda: False,
+    )
 
     cfg = claude_native.resolve_native_claude_config(spec=None)
 

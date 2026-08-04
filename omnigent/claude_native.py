@@ -2034,10 +2034,12 @@ def resolve_native_claude_config(
         claude`` launch.
     :returns: The launch config, or ``None`` to use Claude's own login.
     """
+    from omnigent.onboarding.ambient import _claude_login_detected
     from omnigent.onboarding.detected import effective_config_with_detected
     from omnigent.onboarding.provider_config import (
         default_provider_for_harness,
         load_config,
+        load_providers,
     )
     from omnigent.runtime.workflow import _load_global_auth, _resolve_provider_for_build
     from omnigent.spec.types import DatabricksAuth
@@ -2046,14 +2048,21 @@ def resolve_native_claude_config(
     #    non-None entry decides the config (including a deliberate None for a
     #    subscription); a None entry means the spec routed to databricks /
     #    global auth → fall back to the spec's own ucode profile.
+    explicit = load_config()
     if spec is not None:
         entry = _resolve_provider_for_build(spec, harness_type="claude-sdk")
         if entry is not None:
+            explicit_provider_names = load_providers(explicit)
+            if entry.name not in explicit_provider_names and _claude_login_detected():
+                _logger.info(
+                    "native-claude routing: Claude CLI login beats ambient provider %r",
+                    entry.name,
+                )
+                return None
             return _native_claude_config_from_entry(entry)
         return _ucode_config_for_profile(spec.executor.profile)
 
     # 2. Spec-less (omnigent claude): explicit default wins first.
-    explicit = load_config()
     entry = default_provider_for_harness(explicit, "claude-sdk")
     if entry is not None:
         return _native_claude_config_from_entry(entry)
@@ -2065,6 +2074,9 @@ def resolve_native_claude_config(
         # A global api_key auth: let Claude's own login handle it (parity
         # with the subscription path); the in-process harness would inject
         # it, but the native CLI uses its configured account.
+        return None
+    if _claude_login_detected():
+        _logger.info("native-claude routing: Claude CLI login beats ambient provider detection")
         return None
     # 3. Ambient detection (first run without configure).
     entry = default_provider_for_harness(effective_config_with_detected(explicit), "claude-sdk")
