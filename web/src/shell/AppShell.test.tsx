@@ -486,6 +486,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AppShell header", () => {
+  it("hides the global sidebar inside an isolated Split Focus pane", () => {
+    mockConversations([{ id: "conv_abc", permission_level: 4 }]);
+    renderShell("/c/conv_abc?split-pane=1");
+
+    expect(screen.queryByTestId("sidebar")).toBeNull();
+  });
+
   it("renders the sidebar toggle on all pages", () => {
     mockConversations([]);
     renderShell("/");

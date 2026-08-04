@@ -151,6 +151,7 @@ export function AppShell() {
   const { panelWidth: inlinePanelWidth, handleProps: inlinePanelHandleProps } =
     useResizableInlinePanel(conversationId ?? null, inlinePanelMinWidth);
   const [searchParams, setSearchParams] = useSearchParams();
+  const isSplitFocusPane = searchParams.get("split-pane") === "1";
   const [sidebarOpen, setSidebarOpen] = useState(initialSidebarOpen);
   // ?sidebar=open surfaces the session list on phone-width shells where the
   // sidebar is closed by default — the destination for a "N sessions need
@@ -1358,12 +1359,14 @@ export function AppShell() {
             {isMacElectronShell() && (
               <TitleBarServerPicker threadTitle={activeSession?.title ?? activeConv?.title} />
             )}
-            <Sidebar
-              open={sidebarOpen}
-              dragProgress={sidebarDragProgress}
-              onClose={() => setSidebarOpen(false)}
-              onOpenSearch={() => setCommandPaletteOpen(true)}
-            />
+            {!isSplitFocusPane && (
+              <Sidebar
+                open={sidebarOpen}
+                dragProgress={sidebarDragProgress}
+                onClose={() => setSidebarOpen(false)}
+                onOpenSearch={() => setCommandPaletteOpen(true)}
+              />
+            )}
 
             {/* Content region (everything right of the sidebar): a relative
           flex row holding the chat+workspace group and the push panels
@@ -1391,8 +1394,10 @@ export function AppShell() {
                 }
               >
                 <ChatHeader
-                  sidebarOpen={sidebarOpen}
-                  onOpenSidebar={() => setSidebarOpen(true)}
+                  sidebarOpen={isSplitFocusPane || sidebarOpen}
+                  onOpenSidebar={() => {
+                    if (!isSplitFocusPane) setSidebarOpen(true);
+                  }}
                   isChildSession={isChildSession}
                   parentSessionId={activeSession?.parentSessionId}
                   conversationId={conversationId}

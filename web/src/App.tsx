@@ -55,6 +55,10 @@ const ControlRoomPage = withPageView(
   "control_room",
   lazy(() => import("@/pages/ControlRoomPage").then((m) => ({ default: m.ControlRoomPage }))),
 );
+const SplitFocusPage = withPageView(
+  "split_focus",
+  lazy(() => import("@/pages/SplitFocusPage").then((m) => ({ default: m.SplitFocusPage }))),
+);
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -154,6 +158,7 @@ function App({ basename }: AppProps = {}) {
           <Route path={`${prefix}/inbox`} element={<InboxPage />} />
           <Route path={`${prefix}/tasks`} element={<TasksPage />} />
           <Route path={`${prefix}/control-room`} element={<ControlRoomPage />} />
+          <Route path={`${prefix}/split-focus`} element={<SplitFocusPage />} />
           {/* Settings renders into the chat outlet so the conversations
               sidebar stays put — entering settings only swaps the card's
               content (the section nav) and the main area. The active section

@@ -386,6 +386,19 @@ describe("Sidebar session list", () => {
     );
   });
 
+  it("renders and activates the Split Focus navigation row", () => {
+    mockConversations(THREE_TYPE_CONVERSATIONS);
+    renderSidebar(true, "/split-focus");
+
+    const splitFocus = screen.getByTestId("split-focus-nav");
+    expect(splitFocus).toHaveAttribute("href", "/split-focus");
+    expect(splitFocus).toHaveTextContent("Split Focus");
+    expect(splitFocus.className).toContain("bg-[var(--sidebar-active)]");
+    expect(screen.getByTestId("control-room-nav").className).not.toContain(
+      "bg-[var(--sidebar-active)]",
+    );
+  });
+
   it("reveals session selection as an icon action on the Sessions header", () => {
     mockConversations(THREE_TYPE_CONVERSATIONS);
     renderSidebar();

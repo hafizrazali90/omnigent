@@ -23,6 +23,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
+  Columns2Icon,
   Columns3Icon,
   CircleStopIcon,
   FolderIcon,
@@ -267,17 +268,23 @@ function useActiveNavItem(): {
   isInboxPage: boolean;
   isTasksPage: boolean;
   isControlRoomPage: boolean;
+  isSplitFocusPage: boolean;
 } {
   const { conversationId: activeConversationId } = useParams<{ conversationId: string }>();
   const leaf = useLocation().pathname.split("/").filter(Boolean).at(-1);
   const isInboxPage = leaf === "inbox";
   const isTasksPage = leaf === "tasks";
   const isControlRoomPage = leaf === "control-room";
+  const isSplitFocusPage = leaf === "split-focus";
   // Exclude the routed workspace pages: they also have no `:conversationId`,
   // so they would otherwise light up the "New session" button.
   const isNewChatPage =
-    activeConversationId == null && !isInboxPage && !isTasksPage && !isControlRoomPage;
-  return { isNewChatPage, isInboxPage, isTasksPage, isControlRoomPage };
+    activeConversationId == null &&
+    !isInboxPage &&
+    !isTasksPage &&
+    !isControlRoomPage &&
+    !isSplitFocusPage;
+  return { isNewChatPage, isInboxPage, isTasksPage, isControlRoomPage, isSplitFocusPage };
 }
 
 /**
@@ -544,7 +551,8 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   }
 
   // Which top-level nav button to highlight for the current route.
-  const { isNewChatPage, isInboxPage, isTasksPage, isControlRoomPage } = useActiveNavItem();
+  const { isNewChatPage, isInboxPage, isTasksPage, isControlRoomPage, isSplitFocusPage } =
+    useActiveNavItem();
 
   // On /settings the card keeps its chrome but swaps the conversation list
   // for the settings section nav (see settingsNav.tsx) — entering settings
@@ -783,6 +791,21 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
               <Link to="/control-room" onClick={onNavClick}>
                 <Columns3Icon className="size-3.5 text-muted-foreground" />
                 Control Room
+              </Link>
+            </Button>
+            <Button
+              asChild
+              className={cn(
+                "sidebar-compact-text h-8 w-full justify-start gap-2 rounded-[var(--radius-otto-button)] border-0 px-2 py-1 font-normal",
+                SIDEBAR_HOVER_HIGHLIGHT,
+                isSplitFocusPage && SIDEBAR_ACTIVE_HIGHLIGHT,
+              )}
+              variant="ghost"
+              data-testid="split-focus-nav"
+            >
+              <Link to="/split-focus" onClick={onNavClick}>
+                <Columns2Icon className="size-3.5 text-muted-foreground" />
+                Split Focus
               </Link>
             </Button>
             {/* "New session" routes to the home composer ("/"), which now owns

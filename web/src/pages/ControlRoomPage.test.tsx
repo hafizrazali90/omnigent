@@ -92,6 +92,10 @@ describe("ControlRoomPage", () => {
     renderPage();
 
     expect(screen.getByRole("link", { name: /Open task/i })).toHaveAttribute("href", "/c/conv_1");
+    expect(screen.getByRole("link", { name: /Open in Split Focus/i })).toHaveAttribute(
+      "href",
+      "/split-focus?session=conv_1",
+    );
   });
 
   it("shows each lane's own transcript and sends only through that lane", async () => {

@@ -2,6 +2,7 @@ import {
   ArrowUpRightIcon,
   BotIcon,
   CircleAlertIcon,
+  Columns2Icon,
   Loader2Icon,
   MessageSquareMoreIcon,
   RadioIcon,
@@ -223,11 +224,17 @@ function TaskLane({ session }: { session: Conversation }) {
           </Button>
         </form>
 
-        <div>
-          <Button asChild className="w-full justify-between" variant="outline">
+        <div className="flex flex-wrap gap-2">
+          <Button asChild className="min-w-40 flex-1 justify-between" variant="outline">
             <Link to={`/c/${encodeURIComponent(session.id)}`}>
               Open task
               <ArrowUpRightIcon className="size-4" />
+            </Link>
+          </Button>
+          <Button asChild className="min-w-40 flex-1 justify-between" variant="outline">
+            <Link to={`/split-focus?session=${encodeURIComponent(session.id)}`}>
+              Open in Split Focus
+              <Columns2Icon className="size-4" />
             </Link>
           </Button>
         </div>
