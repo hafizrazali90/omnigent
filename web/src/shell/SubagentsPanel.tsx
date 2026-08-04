@@ -248,6 +248,8 @@ function WorkerSidebarSummary({
     directWorkers.reduce((total, worker) => total + worker.pending_elicitations_count, 0);
   const workerCount = directWorkers.length + 1;
   const taskTitle = session?.title?.trim() || "Untitled task";
+  const briefSession = rootSession ?? session;
+  const taskUnderstanding = agentOsUnderstandingFromLabels(briefSession?.labels);
 
   return (
     <section
@@ -306,8 +308,30 @@ function WorkerSidebarSummary({
         </p>
       </div>
 
-      {continuity && <ContinuitySummary continuity={continuity} />}
-      <TaskUnderstandingSummary session={rootSession ?? session} />
+      {(taskUnderstanding || continuity) && (
+        <section
+          data-testid="agent-os-task-brief"
+          className="space-y-2 rounded-md border border-border bg-muted/20 p-2"
+        >
+          <div className="flex items-center justify-between gap-2 px-0.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Task brief
+            </p>
+            <span className="text-[10px] text-muted-foreground">Agent OS</span>
+          </div>
+          <TaskUnderstandingSummary session={briefSession} />
+          {continuity && (
+            <details>
+              <summary className="cursor-pointer px-0.5 text-[11px] font-medium text-muted-foreground">
+                Continuity details
+              </summary>
+              <div className="mt-2">
+                <ContinuitySummary continuity={continuity} />
+              </div>
+            </details>
+          )}
+        </section>
+      )}
 
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium">Workers</p>

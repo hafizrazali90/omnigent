@@ -24,12 +24,22 @@ function conversation(id: string, title: string): Conversation {
   };
 }
 
-function setSessions(rows: Conversation[]) {
+function setSessions(
+  rows: Conversation[],
+  state: {
+    hasNextPage?: boolean;
+    fetchNextPage?: () => unknown;
+    isFetchingNextPage?: boolean;
+  } = {},
+) {
   vi.mocked(conversationsHook.useConversations).mockReturnValue({
     data: { pages: [{ data: rows, first_id: null, last_id: null, has_more: false }] },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
+    hasNextPage: state.hasNextPage ?? false,
+    fetchNextPage: state.fetchNextPage ?? vi.fn(),
+    isFetchingNextPage: state.isFetchingNextPage ?? false,
   } as unknown as ReturnType<typeof conversationsHook.useConversations>);
 }
 
@@ -132,6 +142,28 @@ describe("SplitFocusPage", () => {
 
     expect(screen.getAllByTitle(/Task workspace:/)).toHaveLength(4);
     expect(screen.queryByRole("button", { name: "Add workspace" })).toBeNull();
+  });
+
+  it("searches the task picker and can load older tasks", () => {
+    const fetchNextPage = vi.fn();
+    setSessions(
+      [
+        conversation("conv_alpha", "Review payment safeguards"),
+        conversation("conv_beta", "Prepare CRM release"),
+        conversation("conv_gamma", "Check mobile readiness"),
+      ],
+      { hasNextPage: true, fetchNextPage },
+    );
+    renderPage();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search Split Focus tasks" }), {
+      target: { value: "mobile" },
+    });
+    expect(screen.getAllByRole("option", { name: "Check mobile readiness" })).not.toHaveLength(0);
+    expect(screen.queryAllByRole("option", { name: "Prepare CRM release" })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more tasks" }));
+    expect(fetchNextPage).toHaveBeenCalledOnce();
   });
 
   it("shows an actionable empty state when no sessions exist", () => {
