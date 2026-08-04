@@ -5,16 +5,30 @@ import {
   BotIcon,
   CircleAlertIcon,
   Columns2Icon,
+  LayoutGridIcon,
   Loader2Icon,
   MessageSquareMoreIcon,
   RadioIcon,
   SendIcon,
-  TriangleAlertIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageScroll } from "@/components/PageScroll";
+import {
+  PageEmptyState,
+  PageErrorState,
+  PageHeader,
+  PageLoadingState,
+} from "@/components/PagePresentation";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useConversations, type Conversation } from "@/hooks/useConversations";
 import { useControlRoomLane } from "@/hooks/useControlRoomLane";
@@ -105,7 +119,7 @@ function TaskLane({
     <article
       data-testid="control-room-lane"
       className={cn(
-        "flex min-w-0 flex-col rounded-[var(--radius-otto-lg)] border border-border bg-card shadow-sm",
+        "flex min-w-0 flex-col rounded-xl border border-border bg-card",
         density === "compact" ? "min-h-[30rem]" : "min-h-[36rem]",
       )}
     >
@@ -145,15 +159,10 @@ function TaskLane({
             </Button>
           </div>
         </div>
-        <span
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium",
-            state.tone,
-          )}
-        >
+        <Badge variant="outline" className={cn("shrink-0 gap-1.5", state.tone)}>
           <span className={cn("size-1.5 rounded-full", state.dot)} />
           {state.label}
-        </span>
+        </Badge>
       </div>
 
       <div
@@ -165,7 +174,7 @@ function TaskLane({
         {understanding && (
           <dl
             className={cn(
-              "grid rounded-[var(--radius-otto-md)] border border-border bg-background/55 text-sm",
+              "grid rounded-lg border border-border bg-background/55 text-sm",
               density === "compact" ? "gap-2 p-2.5" : "gap-3 p-3",
             )}
           >
@@ -193,12 +202,7 @@ function TaskLane({
           </dl>
         )}
 
-        <div
-          className={cn(
-            "rounded-[var(--radius-otto-md)] bg-muted/45",
-            density === "compact" ? "p-2.5" : "p-3",
-          )}
-        >
+        <div className={cn("rounded-lg bg-muted/45", density === "compact" ? "p-2.5" : "p-3")}>
           <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <MessageSquareMoreIcon className="size-3.5" />
             Current session
@@ -216,7 +220,7 @@ function TaskLane({
 
         <div
           className={cn(
-            "flex flex-1 flex-col overflow-hidden rounded-[var(--radius-otto-md)] border border-border bg-background/65",
+            "flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background/65",
             density === "compact" ? "min-h-32" : "min-h-44",
           )}
         >
@@ -244,7 +248,7 @@ function TaskLane({
                   key={message.id}
                   data-role={message.role}
                   className={cn(
-                    "max-w-[88%] rounded-[var(--radius-otto-md)] px-3 py-2 text-sm leading-relaxed",
+                    "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed",
                     message.role === "user"
                       ? "ml-auto bg-primary text-primary-foreground"
                       : "bg-muted text-foreground",
@@ -421,38 +425,31 @@ export function ControlRoomPage() {
   return (
     <PageScroll
       data-testid="control-room-page"
-      maxWidthClassName="max-w-none"
-      contentClassName="px-5 md:px-8"
+      maxWidthClassName={
+        !query.isLoading && !query.isError && sessions.length > 0 ? "max-w-none" : "max-w-3xl"
+      }
+      contentClassName="px-6"
     >
-      <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Agent OS workspace
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight">Control Room</h1>
-          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Watch your active work together, then enter any task without losing the others.
-          </p>
-        </div>
-        {!query.isLoading && !query.isError && sessions.length > 0 && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="rounded-full border border-border bg-card px-3 py-1.5">
-              {sessions.length} sessions
-            </span>
-            <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-primary">
-              {working} working
-            </span>
-            {needsYou > 0 && (
-              <span className="rounded-full border border-warning/25 bg-warning/10 px-3 py-1.5 text-warning">
-                {needsYou} need you
-              </span>
-            )}
-          </div>
-        )}
-      </header>
+      <PageHeader
+        title="Control Room"
+        description="View and continue your active sessions in one place."
+        actions={
+          !query.isLoading && !query.isError && sessions.length > 0 ? (
+            <>
+              <Badge variant="outline">{sessions.length} sessions</Badge>
+              <Badge variant="secondary">{working} working</Badge>
+              {needsYou > 0 && (
+                <Badge variant="outline" className="border-warning/25 text-warning">
+                  {needsYou} need you
+                </Badge>
+              )}
+            </>
+          ) : undefined
+        }
+      />
 
       {!query.isLoading && !query.isError && sessions.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[var(--radius-otto-md)] border border-border bg-card p-3">
+        <div className="mb-4 flex flex-wrap items-end gap-2">
           <Input
             type="search"
             aria-label="Search tasks"
@@ -461,30 +458,36 @@ export function ControlRoomPage() {
             placeholder="Search tasks…"
             className="min-w-52 flex-1 md:max-w-sm"
           />
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            Visible columns
-            <select
-              aria-label="Visible columns"
-              value={columns}
-              onChange={(event) => setColumns(Number(event.target.value) as 2 | 3 | 4)}
-              className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Columns
+            <Select
+              value={String(columns)}
+              onValueChange={(value) => setColumns(Number(value) as 2 | 3 | 4)}
             >
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
+              <SelectTrigger aria-label="Visible columns" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2">2</SelectItem>
+                <SelectItem value="3">3</SelectItem>
+                <SelectItem value="4">4</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Density
-            <select
-              aria-label="Density"
+            <Select
               value={density}
-              onChange={(event) => setDensity(event.target.value as ControlRoomDensity)}
-              className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+              onValueChange={(value) => setDensity(value as ControlRoomDensity)}
             >
-              <option value="comfortable">Comfortable</option>
-              <option value="compact">Compact</option>
-            </select>
+              <SelectTrigger aria-label="Density" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="comfortable">Comfortable</SelectItem>
+                <SelectItem value="compact">Compact</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           {query.hasNextPage && (
             <Button
@@ -501,43 +504,26 @@ export function ControlRoomPage() {
       )}
 
       {query.isError ? (
-        <div
-          role="alert"
-          className="flex max-w-xl items-center gap-3 rounded-[var(--radius-otto-md)] border border-destructive/30 bg-destructive/5 p-4 text-sm"
-        >
-          <TriangleAlertIcon className="size-5 shrink-0 text-destructive" />
-          <div className="flex-1">
-            <p className="font-medium">Couldn’t load your sessions</p>
-            <p className="text-muted-foreground">
-              Your work is safe. Try loading the overview again.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
-            Try again
-          </Button>
-        </div>
+        <PageErrorState message="Couldn’t load sessions." onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
-        <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" />
-          Loading your active work…
-        </div>
+        <PageLoadingState label="Loading sessions…" />
       ) : sessions.length === 0 ? (
-        <div className="max-w-xl rounded-[var(--radius-otto-lg)] border border-dashed border-border p-8">
-          <h2 className="text-base font-semibold">No active tasks yet</h2>
-          <p className="mt-1 mb-5 text-sm leading-relaxed text-muted-foreground">
-            Start a normal Omnigent session and it will appear here automatically.
-          </p>
-          <Button asChild>
-            <Link to="/">Start a session</Link>
-          </Button>
-        </div>
+        <PageEmptyState
+          icon={LayoutGridIcon}
+          title="No sessions yet"
+          description="Start a session and it will appear here."
+          actions={
+            <Button asChild>
+              <Link to="/">New session</Link>
+            </Button>
+          }
+        />
       ) : visibleSessions.length === 0 ? (
-        <div className="max-w-xl rounded-[var(--radius-otto-lg)] border border-dashed border-border p-8">
-          <h2 className="text-base font-semibold">No matching tasks</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Try another search or load older tasks.
-          </p>
-        </div>
+        <PageEmptyState
+          icon={LayoutGridIcon}
+          title="No sessions found"
+          description="Try another search or load older sessions."
+        />
       ) : (
         <div
           data-testid="control-room-lanes"

@@ -38,7 +38,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangleIcon,
   ArrowRightIcon,
   CircleCheckIcon,
   ChevronDownIcon,
@@ -48,7 +47,14 @@ import {
 } from "lucide-react";
 import { ApprovalCard, type SubmitApprovalFn } from "@/components/blocks/ApprovalCard";
 import { PageScroll } from "@/components/PageScroll";
+import {
+  PageEmptyState,
+  PageErrorState,
+  PageHeader,
+  PageLoadingState,
+} from "@/components/PagePresentation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCommentInbox } from "@/hooks/useCommentInbox";
 import { useConversations } from "@/hooks/useConversations";
@@ -208,76 +214,58 @@ export function InboxPage() {
 
   return (
     <PageScroll contentClassName="px-6">
-      <div className="mb-6 flex flex-col items-start gap-2 sm:flex-row sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Needs You</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Decisions, stopped work, completed work, and comments across your sessions.
-          </p>
-        </div>
-        {(items.length > 0 || sessionAttention.length > 0 || commentInbox.items.length > 0) && (
-          <span className="shrink-0 text-sm text-muted-foreground">
-            {[
-              items.length > 0 && (items.length === 1 ? "1 approval" : `${items.length} approvals`),
-              sessionAttention.length > 0 &&
-                (sessionAttention.length === 1 ? "1 task" : `${sessionAttention.length} tasks`),
-              commentInbox.items.length > 0 &&
-                (commentInbox.items.length === 1
-                  ? "1 comment"
-                  : `${commentInbox.items.length} comments`),
-            ]
-              .filter(Boolean)
-              .join(" · ")}{" "}
-            waiting
-          </span>
-        )}
-      </div>
+      <PageHeader
+        title="Needs You"
+        description="Review approvals, stopped sessions, completed work, and comments."
+        actions={
+          items.length > 0 || sessionAttention.length > 0 || commentInbox.items.length > 0 ? (
+            <Badge variant="outline">
+              {[
+                items.length > 0 &&
+                  (items.length === 1 ? "1 approval" : `${items.length} approvals`),
+                sessionAttention.length > 0 &&
+                  (sessionAttention.length === 1 ? "1 task" : `${sessionAttention.length} tasks`),
+                commentInbox.items.length > 0 &&
+                  (commentInbox.items.length === 1
+                    ? "1 comment"
+                    : `${commentInbox.items.length} comments`),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Badge>
+          ) : undefined
+        }
+      />
 
       {failedSessionCount > 0 && (
-        <div
-          data-testid="inbox-load-error"
-          className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
-        >
-          <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
-          <span className="flex-1">
-            Couldn’t load inbox items from {failedSessionCount}{" "}
-            {failedSessionCount === 1 ? "session" : "sessions"}.
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              failedSnapshots.forEach((q) => void q.refetch());
-              commentInbox.retryFailed();
-            }}
-          >
-            Retry
-          </Button>
-        </div>
+        <PageErrorState
+          testId="inbox-load-error"
+          className="mb-4"
+          message={`Couldn’t load items from ${failedSessionCount} ${
+            failedSessionCount === 1 ? "session" : "sessions"
+          }.`}
+          onRetry={() => {
+            failedSnapshots.forEach((q) => void q.refetch());
+            commentInbox.retryFailed();
+          }}
+        />
       )}
 
       {assembling &&
         items.length === 0 &&
         sessionAttention.length === 0 &&
-        commentInbox.items.length === 0 && (
-          <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" />
-            Checking what needs you…
-          </div>
-        )}
+        commentInbox.items.length === 0 && <PageLoadingState label="Checking what needs you…" />}
 
       {!assembling &&
         failedSessionCount === 0 &&
         items.length === 0 &&
         sessionAttention.length === 0 &&
         commentInbox.items.length === 0 && (
-          <div className="flex flex-col items-center gap-2 py-16 text-center">
-            <InboxIcon className="size-8 text-muted-foreground/50" />
-            <p className="text-sm font-medium">Nothing needs you right now</p>
-            <p className="text-xs text-muted-foreground">
-              We checked your sessions for approvals, stopped work, completed work, and comments.
-            </p>
-          </div>
+          <PageEmptyState
+            icon={InboxIcon}
+            title="Nothing needs you right now"
+            description="Approvals, stopped sessions, completed work, and comments will appear here."
+          />
         )}
 
       <div className="flex flex-col gap-4">

@@ -1,14 +1,21 @@
-import {
-  Columns2Icon,
-  Loader2Icon,
-  PlusIcon,
-  SearchIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from "lucide-react";
+import { Columns2Icon, Loader2Icon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { PageScroll } from "@/components/PageScroll";
+import {
+  PageEmptyState,
+  PageErrorState,
+  PageHeader,
+  PageLoadingState,
+} from "@/components/PagePresentation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConversations, type Conversation } from "@/hooks/useConversations";
 import { Link, useRebasePath, useSearchParams } from "@/lib/routing";
 
@@ -91,101 +98,92 @@ export function SplitFocusPage() {
 
   if (query.isLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Loader2Icon className="size-4 animate-spin" />
-        Loading Split Focus…
-      </div>
+      <PageScroll contentClassName="px-6">
+        <PageHeader title="Split Focus" description="Work with multiple sessions side by side." />
+        <PageLoadingState label="Loading sessions…" />
+      </PageScroll>
     );
   }
 
   if (query.isError) {
     return (
-      <div className="m-6 flex max-w-xl items-center gap-3 rounded-[var(--radius-otto-md)] border border-destructive/30 bg-destructive/5 p-4 text-sm">
-        <TriangleAlertIcon className="size-5 shrink-0 text-destructive" />
-        <div className="flex-1">
-          <p className="font-medium">Couldn’t load your tasks</p>
-          <p className="text-muted-foreground">Your sessions are safe. Try Split Focus again.</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
-          Try again
-        </Button>
-      </div>
+      <PageScroll contentClassName="px-6">
+        <PageHeader title="Split Focus" description="Work with multiple sessions side by side." />
+        <PageErrorState message="Couldn’t load sessions." onRetry={() => void query.refetch()} />
+      </PageScroll>
     );
   }
 
   if (sessions.length === 0) {
     return (
-      <div className="m-6 max-w-xl rounded-[var(--radius-otto-lg)] border border-dashed border-border p-8">
-        <h1 className="text-lg font-semibold">No tasks available for Split Focus</h1>
-        <p className="mt-1 mb-5 text-sm leading-relaxed text-muted-foreground">
-          Start two normal Omnigent sessions, then return here to keep them open together.
-        </p>
-        <Button asChild>
-          <Link to="/">Start a session</Link>
-        </Button>
-      </div>
+      <PageScroll contentClassName="px-6">
+        <PageHeader title="Split Focus" description="Work with multiple sessions side by side." />
+        <PageEmptyState
+          icon={Columns2Icon}
+          title="No sessions yet"
+          description="Start two sessions to work with them side by side."
+          actions={
+            <Button asChild>
+              <Link to="/">New session</Link>
+            </Button>
+          }
+        />
+      </PageScroll>
     );
   }
 
   return (
     <section
       data-testid="split-focus-page"
-      className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-4"
     >
-      <header className="flex shrink-0 flex-wrap items-end justify-between gap-3 py-4">
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Agent OS workspace
-          </p>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <Columns2Icon className="size-5" />
-            Split Focus
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Keep complete task workspaces open together without mixing their session state.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              aria-label="Search Split Focus tasks"
-              value={taskSearch}
-              onChange={(event) => setTaskSearch(event.target.value)}
-              placeholder="Find a task…"
-              className="w-56 pl-8"
-            />
-          </div>
-          {query.hasNextPage && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={query.isFetchingNextPage}
-              onClick={() => void query.fetchNextPage()}
-            >
-              {query.isFetchingNextPage && <Loader2Icon className="size-4 animate-spin" />}
-              Load more tasks
-            </Button>
-          )}
-          {paneIds.length < MAX_PANES && availableToAdd && (
-            <Button type="button" variant="outline" onClick={addPane}>
-              <PlusIcon className="size-4" />
-              Add workspace
-            </Button>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        className="mb-4 shrink-0 py-4"
+        title="Split Focus"
+        description="Work with multiple sessions side by side."
+        actions={
+          <>
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label="Search Split Focus tasks"
+                value={taskSearch}
+                onChange={(event) => setTaskSearch(event.target.value)}
+                placeholder="Find a task…"
+                className="w-56 pl-8"
+              />
+            </div>
+            {query.hasNextPage && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={query.isFetchingNextPage}
+                onClick={() => void query.fetchNextPage()}
+              >
+                {query.isFetchingNextPage && <Loader2Icon className="size-4 animate-spin" />}
+                Load more tasks
+              </Button>
+            )}
+            {paneIds.length < MAX_PANES && availableToAdd && (
+              <Button type="button" variant="outline" onClick={addPane}>
+                <PlusIcon className="size-4" />
+                Add workspace
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {normalizedSearch && matchingSessions.length === 0 && (
-        <div className="mb-3 rounded-[var(--radius-otto-md)] border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          No loaded tasks match. Try another search or load older tasks.
+        <div className="mb-3 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          No loaded sessions match. Try another search or load older sessions.
         </div>
       )}
 
       {sessions.length === 1 && (
-        <div className="mb-3 rounded-[var(--radius-otto-md)] border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          Start one more session to use Split Focus side by side.
+        <div className="mb-3 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          Start one more session to work side by side.
         </div>
       )}
 
@@ -204,25 +202,28 @@ export function SplitFocusPage() {
             <article
               key={session.id}
               data-testid="split-focus-pane"
-              className="flex min-h-0 min-w-[28rem] flex-1 flex-col overflow-hidden rounded-[var(--radius-otto-lg)] border border-border bg-card shadow-sm"
+              className="flex min-h-0 min-w-[28rem] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card"
             >
               <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-                <select
-                  aria-label={`Workspace ${index + 1}`}
-                  value={session.id}
-                  onChange={(event) => replacePane(index, event.target.value)}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm font-medium"
-                >
-                  {pickerSessions.map((option) => (
-                    <option
-                      key={option.id}
-                      value={option.id}
-                      disabled={option.id !== session.id && paneIds.includes(option.id)}
-                    >
-                      {option.title?.trim() || "Untitled session"}
-                    </option>
-                  ))}
-                </select>
+                <Select value={session.id} onValueChange={(value) => replacePane(index, value)}>
+                  <SelectTrigger
+                    aria-label={`Workspace ${index + 1}`}
+                    className="min-w-0 flex-1 font-medium"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickerSessions.map((option) => (
+                      <SelectItem
+                        key={option.id}
+                        value={option.id}
+                        disabled={option.id !== session.id && paneIds.includes(option.id)}
+                      >
+                        {option.title?.trim() || "Untitled session"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {paneIds.length > MIN_PANES && (
                   <Button
                     type="button"

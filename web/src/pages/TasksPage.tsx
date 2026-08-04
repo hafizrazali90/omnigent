@@ -11,8 +11,14 @@
  */
 
 import { useMemo, useState } from "react";
-import { ClockIcon, Loader2Icon, SearchIcon, TriangleAlertIcon } from "lucide-react";
+import { ClockIcon, SearchIcon } from "lucide-react";
 import { PageScroll } from "@/components/PageScroll";
+import {
+  PageEmptyState,
+  PageErrorState,
+  PageHeader,
+  PageLoadingState,
+} from "@/components/PagePresentation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CreateScheduledTaskDialog } from "@/components/scheduled/CreateScheduledTaskDialog";
@@ -148,17 +154,15 @@ export function TasksPage() {
 
   return (
     <PageScroll contentClassName="px-6">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">Automations</h1>
-          <p className="text-sm text-muted-foreground">
-            Run agent sessions on a recurring schedule. Tasks fire on a connected host.
-          </p>
-        </div>
-        <Button data-testid="new-task-button" className="shrink-0" onClick={openManual}>
-          New task
-        </Button>
-      </div>
+      <PageHeader
+        title="Automations"
+        description="Run agent sessions on a recurring schedule. Tasks fire on a connected host."
+        actions={
+          <Button data-testid="new-task-button" onClick={openManual}>
+            New task
+          </Button>
+        }
+      />
 
       {/* Search + filter tabs. No "Mark all as read" control: there is no unread
           model for scheduled tasks in this build, so it would act on nothing.
@@ -199,22 +203,13 @@ export function TasksPage() {
       </div>
 
       {isError ? (
-        <div
-          role="alert"
-          data-testid="tasks-load-error"
-          className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
-        >
-          <TriangleAlertIcon className="size-4 shrink-0 text-destructive" />
-          <span className="flex-1">Couldn’t load automations.</span>
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            Retry
-          </Button>
-        </div>
+        <PageErrorState
+          testId="tasks-load-error"
+          message="Couldn’t load automations."
+          onRetry={() => void refetch()}
+        />
       ) : isLoading ? (
-        <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground">
-          <Loader2Icon className="size-4 animate-spin" />
-          Loading automations…
-        </div>
+        <PageLoadingState label="Loading automations…" />
       ) : filtered.length === 0 ? (
         <EmptyState
           hasAny={hasAnyTasks}
@@ -275,20 +270,20 @@ function EmptyState({
         <div className="py-10 text-center text-sm text-muted-foreground">No automations found</div>
       )}
       {!hasAny && (
-        <div className="flex flex-col items-center gap-2 py-12 text-center">
-          <ClockIcon className="size-8 text-muted-foreground/50" />
-          <p className="text-sm font-medium">No automations yet</p>
-          <p className="max-w-sm text-xs text-muted-foreground">
-            Create a task to run an agent session automatically on a recurring schedule.
-          </p>
-          {showSuggestions && (
-            <SuggestionsSection
-              onPick={onPickSuggestion}
-              showHeading={false}
-              className="mt-3 border-t-0 pt-0"
-            />
-          )}
-        </div>
+        <PageEmptyState
+          icon={ClockIcon}
+          title="No automations yet"
+          description="Create a task to run an agent session automatically on a recurring schedule."
+          actions={
+            showSuggestions ? (
+              <SuggestionsSection
+                onPick={onPickSuggestion}
+                showHeading={false}
+                className="mt-0 border-t-0 pt-0"
+              />
+            ) : undefined
+          }
+        />
       )}
     </div>
   );
