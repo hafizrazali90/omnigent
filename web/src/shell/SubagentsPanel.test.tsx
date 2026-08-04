@@ -340,7 +340,10 @@ describe("SubagentsPanel", () => {
 
     renderPanel();
 
+    const taskBrief = screen.getByTestId("agent-os-task-brief");
     const understanding = screen.getByTestId("agent-os-task-understanding");
+    expect(within(taskBrief).getByTestId("agent-os-task-understanding")).toBe(understanding);
+    expect(within(taskBrief).getByText("Task brief")).toBeInTheDocument();
     expect(within(understanding).getByText("ripple-suite")).toBeInTheDocument();
     expect(within(understanding).getByText("review")).toBeInTheDocument();
     expect(within(understanding).getByText("PR opened")).toBeInTheDocument();

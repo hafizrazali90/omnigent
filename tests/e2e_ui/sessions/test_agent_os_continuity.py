@@ -51,9 +51,7 @@ def test_focused_task_reads_only_its_linked_session_map(
                     "decision_needed": "No.",
                     "session_map": _SESSION_MAP,
                     "source_updated_at": (
-                        "2026-08-04T05:30:00Z"
-                        if continuity_reads == 1
-                        else "2026-08-04T05:31:00Z"
+                        "2026-08-04T05:30:00Z" if continuity_reads == 1 else "2026-08-04T05:31:00Z"
                     ),
                     "follow_up_count": 1,
                     "follow_ups": [
@@ -80,6 +78,9 @@ def test_focused_task_reads_only_its_linked_session_map(
     expect(workspace).to_be_visible(timeout=30_000)
     workspace.get_by_role("tab", name=re.compile(r"Agents \d")).click()
 
+    task_brief = page.get_by_test_id("agent-os-task-brief")
+    expect(task_brief).to_be_visible()
+    task_brief.get_by_text("Continuity details", exact=True).click()
     continuity = page.get_by_test_id("agent-os-continuity")
     expect(continuity).to_be_visible()
     expect(

@@ -1,6 +1,14 @@
-import { Columns2Icon, Loader2Icon, PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import {
+  Columns2Icon,
+  Loader2Icon,
+  PlusIcon,
+  SearchIcon,
+  TriangleAlertIcon,
+  XIcon,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useConversations, type Conversation } from "@/hooks/useConversations";
 import { Link, useRebasePath, useSearchParams } from "@/lib/routing";
 
@@ -26,6 +34,7 @@ function sameSelection(left: string[], right: string[]): boolean {
 
 export function SplitFocusPage() {
   const query = useConversations("", false, { reconcileWhileConnected: true });
+  const [taskSearch, setTaskSearch] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const rebasePath = useRebasePath();
   const sessions = useMemo(
@@ -37,6 +46,16 @@ export function SplitFocusPage() {
   );
   const requested = searchParams.getAll("session");
   const paneIds = selectedSessionIds(requested, sessions);
+  const normalizedSearch = taskSearch.trim().toLocaleLowerCase();
+  const matchingSessions = sessions.filter((session) => {
+    if (!normalizedSearch) return true;
+    return [
+      session.title,
+      session.workspace,
+      session.agent_name,
+      ...Object.values(session.labels ?? {}),
+    ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch));
+  });
 
   function persistSelection(nextIds: string[]) {
     const next = new URLSearchParams();
@@ -126,13 +145,43 @@ export function SplitFocusPage() {
             Keep complete task workspaces open together without mixing their session state.
           </p>
         </div>
-        {paneIds.length < MAX_PANES && availableToAdd && (
-          <Button type="button" variant="outline" onClick={addPane}>
-            <PlusIcon className="size-4" />
-            Add workspace
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              aria-label="Search Split Focus tasks"
+              value={taskSearch}
+              onChange={(event) => setTaskSearch(event.target.value)}
+              placeholder="Find a task…"
+              className="w-56 pl-8"
+            />
+          </div>
+          {query.hasNextPage && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={query.isFetchingNextPage}
+              onClick={() => void query.fetchNextPage()}
+            >
+              {query.isFetchingNextPage && <Loader2Icon className="size-4 animate-spin" />}
+              Load more tasks
+            </Button>
+          )}
+          {paneIds.length < MAX_PANES && availableToAdd && (
+            <Button type="button" variant="outline" onClick={addPane}>
+              <PlusIcon className="size-4" />
+              Add workspace
+            </Button>
+          )}
+        </div>
       </header>
+
+      {normalizedSearch && matchingSessions.length === 0 && (
+        <div className="mb-3 rounded-[var(--radius-otto-md)] border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          No loaded tasks match. Try another search or load older tasks.
+        </div>
+      )}
 
       {sessions.length === 1 && (
         <div className="mb-3 rounded-[var(--radius-otto-md)] border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
@@ -146,6 +195,10 @@ export function SplitFocusPage() {
           if (!session) return null;
           const title = session.title?.trim() || "Untitled session";
           const frameUrl = rebasePath(`/c/${encodeURIComponent(session.id)}?split-pane=1`);
+          const pickerSessions = [
+            session,
+            ...matchingSessions.filter((option) => option.id !== session.id),
+          ];
 
           return (
             <article
@@ -160,7 +213,7 @@ export function SplitFocusPage() {
                   onChange={(event) => replacePane(index, event.target.value)}
                   className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm font-medium"
                 >
-                  {sessions.map((option) => (
+                  {pickerSessions.map((option) => (
                     <option
                       key={option.id}
                       value={option.id}
