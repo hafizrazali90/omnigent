@@ -17,8 +17,10 @@
 import { lazy, Suspense, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import {
+  ActivityIcon,
   BookOpenIcon,
   BotIcon,
+  CircleAlertIcon,
   Code2Icon,
   CompassIcon,
   ChevronDownIcon,
@@ -26,11 +28,15 @@ import {
   CornerDownRightIcon,
   FileTextIcon,
   FlaskConicalIcon,
+  GitCompareArrowsIcon,
   ListIcon,
+  ListTodoIcon,
   NetworkIcon,
   PlusIcon,
   ScanSearchIcon,
   SearchIcon,
+  ShieldCheckIcon,
+  UsersIcon,
 } from "lucide-react";
 import { Link, useLocation } from "@/lib/routing";
 import { Badge } from "@/components/ui/badge";
@@ -104,12 +110,20 @@ interface SubagentsPanelProps {
    *  child it is the child's parent id. AppShell resolves this from
    *  ``activeSession.parentSessionId``. */
   rootSessionId: string;
+  /** Real changed-file count for the focused session's workspace. */
+  changedCount?: number;
 }
 
 type ViewMode = "list" | "graph";
 
-export function SubagentsPanel({ conversationId, rootSessionId }: SubagentsPanelProps) {
+export function SubagentsPanel({
+  conversationId,
+  rootSessionId,
+  changedCount = 0,
+}: SubagentsPanelProps) {
   const { children, isLoading, error } = useChildSessions(rootSessionId);
+  const { session: focusedSession } = useSession(conversationId);
+  const { session: rootSession } = useSession(rootSessionId);
   const [addOpen, setAddOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [collapsedRows, setCollapsedRows] = useState<Record<string, boolean>>({});
@@ -137,6 +151,12 @@ export function SubagentsPanel({ conversationId, rootSessionId }: SubagentsPanel
   if (viewMode === "graph") {
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
+        <WorkerSidebarSummary
+          session={focusedSession}
+          rootSession={rootSession}
+          directWorkers={children}
+          changedCount={changedCount}
+        />
         <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
         <Suspense
           fallback={
@@ -153,6 +173,12 @@ export function SubagentsPanel({ conversationId, rootSessionId }: SubagentsPanel
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card">
+      <WorkerSidebarSummary
+        session={focusedSession}
+        rootSession={rootSession}
+        directWorkers={children}
+        changedCount={changedCount}
+      />
       <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
       <button
         type="button"
@@ -181,6 +207,119 @@ export function SubagentsPanel({ conversationId, rootSessionId }: SubagentsPanel
       {addOpen && (
         <AddAgentDialog parentSessionId={rootSessionId} open={addOpen} onOpenChange={setAddOpen} />
       )}
+    </div>
+  );
+}
+
+function WorkerSidebarSummary({
+  session,
+  rootSession,
+  directWorkers,
+  changedCount,
+}: {
+  session: ReturnType<typeof useSession>["session"];
+  rootSession: ReturnType<typeof useSession>["session"];
+  directWorkers: ChildSessionInfo[];
+  changedCount: number;
+}) {
+  const nativeAgent = nativeCodingAgentForWrapper(session?.labels?.[WRAPPER_LABEL_KEY]);
+  const workerName =
+    nativeAgent?.displayName ?? session?.subAgentName ?? session?.agentName ?? "Agent";
+  const focusedStatus =
+    (session?.pendingElicitations?.length ?? 0) > 0
+      ? "Needs response"
+      : sessionStatus(session?.status).label;
+  const todos = session?.todos ?? [];
+  const completedTodos = todos.filter((todo) => todo.status === "completed").length;
+  const needsYou =
+    (rootSession?.pendingElicitations?.length ?? 0) +
+    directWorkers.reduce((total, worker) => total + worker.pending_elicitations_count, 0);
+  const workerCount = directWorkers.length + 1;
+  const taskTitle = session?.title?.trim() || "Untitled task";
+
+  return (
+    <section
+      data-testid="worker-sidebar-summary"
+      className="shrink-0 space-y-3 border-b border-border px-3 py-3"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Current task
+          </p>
+          <h2 className="truncate text-sm font-semibold">{taskTitle}</h2>
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <ActivityIcon className="size-3.5" />
+            <span className="truncate">{workerName}</span>
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className={cn(
+            "shrink-0",
+            focusedStatus === "Needs response" && "border-warning/30 text-warning",
+            focusedStatus === "Failed" && "border-destructive/30 text-destructive",
+          )}
+        >
+          {focusedStatus}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+        <WorkerEvidence
+          icon={UsersIcon}
+          text={`${workerCount} ${workerCount === 1 ? "worker" : "workers"}`}
+        />
+        <WorkerEvidence
+          icon={GitCompareArrowsIcon}
+          text={`${changedCount} changed ${changedCount === 1 ? "file" : "files"}`}
+        />
+        <WorkerEvidence
+          icon={ListTodoIcon}
+          text={todos.length > 0 ? `${completedTodos}/${todos.length} tasks` : "No task checklist"}
+        />
+        <WorkerEvidence
+          icon={needsYou > 0 ? CircleAlertIcon : ShieldCheckIcon}
+          text={needsYou > 0 ? `${needsYou} need you` : "No approvals waiting"}
+          attention={needsYou > 0}
+        />
+      </div>
+
+      <div className="rounded-md border border-border bg-muted/45 px-2.5 py-2">
+        <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          Approval boundary
+        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-foreground/80">
+          Commit, push, and deploy still require your approval.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium">Workers</p>
+        <span className="text-[10px] text-muted-foreground">Live session tree</span>
+      </div>
+    </section>
+  );
+}
+
+function WorkerEvidence({
+  icon: Icon,
+  text,
+  attention = false,
+}: {
+  icon: AgentRowIcon;
+  text: string;
+  attention?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background/55 px-2 py-1.5 text-muted-foreground",
+        attention && "border-warning/25 bg-warning/5 text-warning",
+      )}
+    >
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">{text}</span>
     </div>
   );
 }

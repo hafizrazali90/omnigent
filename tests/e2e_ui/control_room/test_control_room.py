@@ -8,6 +8,8 @@ the Control Room link into the unchanged conversation workspace.
 
 from __future__ import annotations
 
+import re
+
 import httpx
 from playwright.sync_api import Page, expect
 
@@ -86,3 +88,21 @@ def test_control_room_replies_stay_in_their_sessions_and_open_original_workspace
     crm_lane.get_by_role("link", name="Open task").click()
     expect(page).to_have_url(f"{base_url}/c/{session_b}")
     expect(page.get_by_label("Message the agent")).to_be_visible(timeout=30_000)
+
+    expand_workspace = page.get_by_role("button", name="Expand right panel")
+    if expand_workspace.is_visible():
+        expand_workspace.click()
+    workspace = page.get_by_label("Workspace")
+    expect(workspace).to_be_visible(timeout=30_000)
+    workspace.get_by_role("tab", name=re.compile(r"Agents \d")).click()
+
+    worker_summary = page.get_by_test_id("worker-sidebar-summary")
+    expect(worker_summary).to_be_visible()
+    expect(worker_summary.get_by_text("Prepare CRM release", exact=True)).to_be_visible()
+    expect(worker_summary.get_by_text("1 worker", exact=True)).to_be_visible()
+    expect(worker_summary.get_by_text("No task checklist", exact=True)).to_be_visible()
+    expect(
+        worker_summary.get_by_text(
+            "Commit, push, and deploy still require your approval.", exact=True
+        )
+    ).to_be_visible()

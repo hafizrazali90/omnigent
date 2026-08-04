@@ -60,16 +60,23 @@ interface RenderOptions {
   conversationId?: string;
   /** The root id whose children populate the list. */
   rootSessionId?: string;
+  /** Real changed-file count surfaced as focused-task evidence. */
+  changedCount?: number;
 }
 
 function renderPanel({
   conversationId = "conv_parent",
   rootSessionId = "conv_parent",
+  changedCount = 0,
   initialEntries,
 }: RenderOptions & { initialEntries?: string[] } = {}) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <SubagentsPanel conversationId={conversationId} rootSessionId={rootSessionId} />
+      <SubagentsPanel
+        conversationId={conversationId}
+        rootSessionId={rootSessionId}
+        changedCount={changedCount}
+      />
     </MemoryRouter>,
   );
 }
@@ -164,6 +171,66 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SubagentsPanel", () => {
+  it("summarizes the focused task, real evidence, attention, and approval boundary", () => {
+    mockChildTree({
+      conv_root: [
+        childInfo({
+          id: "conv_reviewer",
+          title: "reviewer:worker-sidebar",
+          tool: "reviewer",
+          session_name: "worker-sidebar",
+          busy: true,
+          pending_elicitations_count: 1,
+          last_message_preview: "Checking the browser journey",
+        }),
+      ],
+    });
+    useSessionMock.mockImplementation((sessionId) => ({
+      session: {
+        id: sessionId ?? "conv_root",
+        agentId: "ag_codex",
+        agentName: "codex-native-ui",
+        runnerId: "runner_codex",
+        status: "running",
+        createdAt: 0,
+        title: "Build the Worker Sidebar",
+        labels: { "omnigent.wrapper": "codex-native-ui" },
+        items: [],
+        pendingElicitations: [{ id: "approval_main" }],
+        permissionLevel: 4,
+        parentSessionId: null,
+        subAgentName: null,
+        kind: "default",
+        harness: "codex",
+        modelOverride: "gpt-5.6",
+        todos: [
+          { content: "Build summary", status: "completed", activeForm: "Building summary" },
+          { content: "Run browser QA", status: "in_progress", activeForm: "Running browser QA" },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    }));
+
+    renderPanel({
+      conversationId: "conv_root",
+      rootSessionId: "conv_root",
+      changedCount: 3,
+    });
+
+    const summary = screen.getByTestId("worker-sidebar-summary");
+    expect(within(summary).getByText("Build the Worker Sidebar")).toBeInTheDocument();
+    expect(within(summary).getByText("Codex")).toBeInTheDocument();
+    expect(within(summary).getByText("Needs response")).toBeInTheDocument();
+    expect(within(summary).getByText("2 workers")).toBeInTheDocument();
+    expect(within(summary).getByText("3 changed files")).toBeInTheDocument();
+    expect(within(summary).getByText("1/2 tasks")).toBeInTheDocument();
+    expect(within(summary).getByText("2 need you")).toBeInTheDocument();
+    expect(
+      within(summary).getByText("Commit, push, and deploy still require your approval."),
+    ).toBeInTheDocument();
+  });
+
   it("always renders a 'main' row linking to the root session", () => {
     // No children at all — the panel still shows the main link so
     // the user always has a path back to the parent.

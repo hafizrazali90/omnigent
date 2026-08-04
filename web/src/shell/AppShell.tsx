@@ -1545,7 +1545,11 @@ export function AppShell() {
                   onClose={() => setSubagentsPanelOpen(false)}
                   testId="subagents-panel-drawer"
                 >
-                  <SubagentsPanel conversationId={conversationId} rootSessionId={rootSessionId} />
+                  <SubagentsPanel
+                    conversationId={conversationId}
+                    rootSessionId={rootSessionId}
+                    changedCount={changedCount}
+                  />
                 </MobilePanelDrawer>
               )}
               {conversationId && (
