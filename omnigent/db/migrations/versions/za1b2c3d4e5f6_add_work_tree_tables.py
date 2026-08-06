@@ -1,7 +1,7 @@
 """add work_items, work_item_events and session_related_projects tables
 
 Revision ID: za1b2c3d4e5f6
-Revises: c4d5e6f7a8b9
+Revises: e6f7a8b9c0d1
 Create Date: 2026-08-06 00:00:00.000000
 
 Adds the durable, provider-neutral session Work Tree: ``work_items`` (the tree
@@ -34,7 +34,7 @@ from alembic import op
 from omnigent.db.db_models import Uuid16
 
 revision: str = "za1b2c3d4e5f6"
-down_revision: str | None = "c4d5e6f7a8b9"
+down_revision: str | None = "e6f7a8b9c0d1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

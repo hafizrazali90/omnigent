@@ -35,7 +35,7 @@ import omnigent.db
 from omnigent.db.db_models import Uuid16
 
 _REVISION = "za1b2c3d4e5f6"
-_PREVIOUS = "c4d5e6f7a8b9"
+_PREVIOUS = "e6f7a8b9c0d1"
 _CHECK = "ck_conversation_metadata_user_lifecycle"
 _METADATA_TABLE = "omnigent_conversation_metadata"
 _NEW_COLUMNS = (
