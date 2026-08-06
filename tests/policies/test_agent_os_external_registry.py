@@ -70,17 +70,13 @@ def test_external_adapter_builds_as_an_independent_installable_wheel(tmp_path: P
     with zipfile.ZipFile(wheels[0]) as archive:
         entry_point_text = archive.read(entry_points).decode("utf-8")
     assert (
-        "agent-os-link-continuity = sifututor_agent_os_omnigent.linking:main"
-        in entry_point_text
+        "agent-os-link-continuity = sifututor_agent_os_omnigent.linking:main" in entry_point_text
     )
     assert (
         "agent-os-set-understanding = sifututor_agent_os_omnigent.understanding:main"
         in entry_point_text
     )
-    assert (
-        "agent-os-set-proven-state = sifututor_agent_os_omnigent.state:main"
-        in entry_point_text
-    )
+    assert "agent-os-set-proven-state = sifututor_agent_os_omnigent.state:main" in entry_point_text
 
     env = {**os.environ, "PYTHONPATH": str(wheels[0])}
     imported = subprocess.run(
