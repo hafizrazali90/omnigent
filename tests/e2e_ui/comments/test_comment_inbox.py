@@ -136,10 +136,10 @@ def test_comment_surfaces_in_inbox_until_opened_in_file_browser(
     expect(item).to_contain_text("AS")
     expect(item).to_contain_text(_ALICE)
 
-    # The sidebar Inbox badge counts the unseen comment. Exactly one
+    # The sidebar Needs You badge counts the unseen comment. Exactly one
     # item exists on this worker's server (sessions are per-test and
     # torn down), so the singular label is deterministic.
-    expect(page.get_by_label("1 inbox item waiting")).to_be_visible()
+    expect(page.get_by_label("1 item needs you")).to_be_visible()
 
     # Opening the file WITHOUT the comment param leaves the comments
     # panel collapsed — the comment body is not on screen, so it must
@@ -166,9 +166,9 @@ def test_comment_surfaces_in_inbox_until_opened_in_file_browser(
     # the badge is gone, and the empty state renders. If this still
     # shows the item, the FileViewer never recorded it as seen.
     page.goto(f"{base_url}/inbox")
-    expect(page.get_by_text("Nothing waiting on you")).to_be_visible(timeout=15_000)
+    expect(page.get_by_text("Nothing needs you right now")).to_be_visible(timeout=15_000)
     expect(page.locator('[data-testid="inbox-comment"]')).to_have_count(0)
-    expect(page.get_by_label("1 inbox item waiting")).to_have_count(0)
+    expect(page.get_by_label("1 item needs you")).to_have_count(0)
 
 
 @pytest.fixture
@@ -237,6 +237,6 @@ def test_own_comment_never_surfaces_in_inbox(
     # The empty state must render and no comment card may appear, despite
     # the session carrying an unseen draft comment. A visible card here
     # means the author filter regressed (self / unauthored comments leak).
-    expect(page.get_by_text("Nothing waiting on you")).to_be_visible(timeout=15_000)
+    expect(page.get_by_text("Nothing needs you right now")).to_be_visible(timeout=15_000)
     expect(page.locator('[data-testid="inbox-comment"]')).to_have_count(0)
-    expect(page.get_by_label("1 inbox item waiting")).to_have_count(0)
+    expect(page.get_by_label("1 item needs you")).to_have_count(0)
