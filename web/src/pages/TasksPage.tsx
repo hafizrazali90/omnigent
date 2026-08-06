@@ -189,7 +189,7 @@ export function TasksPage() {
                 data-testid={`tasks-filter-${tab.value}`}
                 onClick={() => setFilter(tab.value)}
                 className={cn(
-                  "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                  "rounded-md px-3 py-1 text-ui font-medium transition-colors",
                   filter === tab.value
                     ? "bg-muted text-foreground"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -267,7 +267,7 @@ function EmptyState({
   return (
     <div className="py-8" data-testid="tasks-empty-state">
       {hasAny && (
-        <div className="py-10 text-center text-sm text-muted-foreground">No automations found</div>
+        <div className="py-10 text-center text-ui text-muted-foreground">No automations found</div>
       )}
       {!hasAny && (
         <PageEmptyState
@@ -306,7 +306,7 @@ function SuggestionsSection({
       className={cn("mt-4 border-t border-border/60 pt-4", className)}
       data-testid="tasks-suggestions"
     >
-      {showHeading && <h2 className="mb-3 text-sm text-muted-foreground">Suggestions</h2>}
+      {showHeading && <h2 className="mb-3 text-ui text-muted-foreground">Suggestions</h2>}
       {/* Compact chips that wrap onto multiple lines. */}
       <div className="flex flex-wrap gap-2">
         {SCHEDULED_TASK_SUGGESTIONS.map((s) => {
@@ -317,7 +317,7 @@ function SuggestionsSection({
               type="button"
               onClick={() => onPick(s)}
               data-testid={`suggestion-${s.id}`}
-              className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-normal transition-colors hover:bg-muted hover:text-foreground"
+              className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-ui font-normal transition-colors hover:bg-muted hover:text-foreground"
             >
               <Icon className={cn("size-4 shrink-0", s.iconClassName)} />
               <span className="truncate">{s.title}</span>

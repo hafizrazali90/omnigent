@@ -46,9 +46,7 @@ def set_current_session_understanding(
         raise ValueError("current Omnigent session identity is unavailable")
     route_project = _bounded_value(project, name="project", limit=_MAX_ROUTE_VALUE)
     route_workflow = _bounded_value(workflow, name="workflow", limit=_MAX_ROUTE_VALUE)
-    route_finish_line = _bounded_value(
-        finish_line, name="finish line", limit=_MAX_FINISH_LINE
-    )
+    route_finish_line = _bounded_value(finish_line, name="finish line", limit=_MAX_FINISH_LINE)
     route_question = " ".join(question.split())
     if len(route_question) > _MAX_QUESTION:
         raise ValueError(f"question must be {_MAX_QUESTION} characters or fewer")
@@ -57,9 +55,7 @@ def set_current_session_understanding(
         "agent_os.workflow": route_workflow,
         "agent_os.finish_line": route_finish_line,
         "agent_os.finish_line_source": "orchestrator",
-        "agent_os.route_status": (
-            "needs-clarification" if route_question else "understood"
-        ),
+        "agent_os.route_status": ("needs-clarification" if route_question else "understood"),
         "agent_os.route_question": route_question,
         "agent_os.route_source": "orchestrator",
     }
