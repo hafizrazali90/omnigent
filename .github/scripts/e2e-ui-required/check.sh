@@ -16,8 +16,22 @@
 #   3. The `skip-e2e-ui-test` label is present AND     -> explicit, maintainer-
 #      maintainer-effective (author is a maintainer,      backed waiver. The
 #      or a maintainer's latest decisive review is        label alone is NOT
-#      APPROVED).                                          enough; a fork author
-#                                                          cannot self-waive.
+#      APPROVED).                                          enough; an untrusted
+#                                                          fork author cannot
+#                                                          self-waive.
+#
+# NO-JUDGE FALLBACK (forks) -- a fork typically has no LLM gateway secrets, and
+# case 2 cannot run without them. Rather than block every UI PR forever, a fork
+# whose owner authored the PR falls back to a deterministic rule: the web/**
+# change must ship an added/updated tests/e2e_ui/** file. That is weaker than
+# the judge (it cannot tell a real test from a token one), which is why it is
+# limited to the account that owns the repository -- an identity taken from
+# repository metadata by the trusted base workflow, never from PR input. The
+# separate E2E UI workflow still has to run that test green before merge.
+# Everyone else keeps needing a maintainer-backed waiver, so an untrusted
+# contributor gains nothing by adding a test file to their diff. Judge
+# configuration that is present but incomplete fails loudly instead of silently
+# dropping to the weaker rule.
 #
 # Case 2 sends the PR's web/** + tests/e2e_ui/** diff to the LLM gateway
 # (OpenAI-compatible: OPENAI_BASE_URL + OPENAI_API_KEY, model E2E_UI_JUDGE_MODEL).
@@ -38,24 +52,35 @@
 # cannot edit this script to weaken its own gate.
 #
 # Env in:  GH_TOKEN, REPO, PR, MAINTAINERS (space-separated, from
-#          merge-ready/load-maintainers.sh), OPENAI_BASE_URL, OPENAI_API_KEY,
-#          E2E_UI_JUDGE_MODEL.
+#          merge-ready/load-maintainers.sh), TRUSTED_FORK_OWNER (fork owner
+#          login from the same script; empty off a fork), OPENAI_BASE_URL,
+#          OPENAI_API_KEY, E2E_UI_JUDGE_MODEL (all three, or none).
 # Exit:    0 = gate satisfied; 1 = blocked.
 
 set -euo pipefail
 
 fail() { echo "::error::$1"; exit 1; }
 pass() { echo "$1"; exit 0; }
+lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
+
+TRUSTED_FORK_OWNER="${TRUSTED_FORK_OWNER:-}"
 
 # --- 1. Changed files (REST, paginated -- robust for large PRs) -----------
 FILES=$(gh api "repos/$REPO/pulls/$PR/files" --paginate \
   --jq '.[] | [.status, .filename] | @tsv')
 
 touches_ui=false
+# Added/updated (never merely deleted) e2e_ui coverage, for the no-judge
+# fallback below. `renamed`/`copied`/`changed` all carry a patch; `removed`
+# is deleted coverage and must not count as coverage.
+adds_e2e_ui=false
 while IFS=$'\t' read -r fstatus path; do
   [[ -z "$path" ]] && continue
   case "$path" in
     web/*) touches_ui=true ;;
+    tests/e2e_ui/*)
+      [[ "$fstatus" != "removed" ]] && adds_e2e_ui=true
+      ;;
   esac
 done <<< "$FILES"
 
@@ -63,7 +88,91 @@ if [[ "$touches_ui" != "true" ]]; then
   pass "PASS: PR touches no web/** files; e2e_ui coverage not required."
 fi
 
-# --- 2. LLM judge: behavior change without adequate e2e_ui coverage? ------
+AUTHOR=$(gh pr view "$PR" --repo "$REPO" --json author --jq '.author.login')
+AUTHOR_LC=$(lower "$AUTHOR")
+
+# --- Last resort: the maintainer-effective skip label ---------------------
+# Reached when the gate is otherwise unsatisfied, from either the judge path or
+# the no-judge fallback. Always terminal: passes or fails, never returns.
+# $1 = why the gate is unsatisfied, for the error message.
+require_waiver() {
+  local why="$1"
+
+  local has_label
+  has_label=$(gh api "repos/$REPO/pulls/$PR" \
+    --jq '[.labels[].name] | index("skip-e2e-ui-test") != null')
+  if [[ "$has_label" != "true" ]]; then
+    fail "This PR changes UI behavior (web/**) without a tests/e2e_ui/** test that covers it: $why. Add a UI test, or have a maintainer apply the 'skip-e2e-ui-test' label after reviewing your local-run proof."
+  fi
+
+  # The label alone is not enough -- a maintainer must be on the hook.
+  if [[ -z "${MAINTAINERS// /}" ]]; then
+    fail "'skip-e2e-ui-test' is set but no maintainers are configured (.github/MAINTAINER on main is missing or empty, and this repo has no trusted fork owner); cannot honor the waiver."
+  fi
+
+  local maintainers_lc m u u_lc approvers
+  maintainers_lc=$(lower "$MAINTAINERS")
+
+  for m in $maintainers_lc; do
+    if [[ "$m" == "$AUTHOR_LC" ]]; then
+      pass "PASS: 'skip-e2e-ui-test' waiver effective -- author @$AUTHOR is a maintainer."
+    fi
+  done
+
+  # Latest decisive (non-COMMENTED) review per user; effective if a maintainer's
+  # latest such review is APPROVED. Matches GitHub's UI: a later COMMENTED review
+  # doesn't supersede an approval, but CHANGES_REQUESTED or DISMISSED does.
+  approvers=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+    --jq '[.[] | select(.state != "COMMENTED")] | group_by(.user.login) | map(max_by(.submitted_at)) | .[] | select(.state == "APPROVED") | .user.login')
+  for u in $approvers; do
+    u_lc=$(lower "$u")
+    for m in $maintainers_lc; do
+      if [[ "$m" == "$u_lc" ]]; then
+        pass "PASS: 'skip-e2e-ui-test' waiver effective -- approved by maintainer @$u."
+      fi
+    done
+  done
+
+  fail "'skip-e2e-ui-test' is set but not effective: author @$AUTHOR is not a maintainer and no maintainer has approved this PR yet. A maintainer must approve to honor the waiver."
+}
+
+# --- 2. Is the LLM judge configured? --------------------------------------
+# All three settings or none. A half-configured judge is a misconfiguration
+# (typo'd secret name, secret not shared with the repo) and must be loud --
+# silently sliding to the weaker fallback would hide a broken gate.
+JUDGE_VARS=(OPENAI_BASE_URL OPENAI_API_KEY E2E_UI_JUDGE_MODEL)
+judge_set=0
+judge_missing=""
+for v in "${JUDGE_VARS[@]}"; do
+  if [[ -n "${!v:-}" ]]; then
+    judge_set=$((judge_set + 1))
+  else
+    judge_missing="$judge_missing $v"
+  fi
+done
+
+if (( judge_set > 0 && judge_set < ${#JUDGE_VARS[@]} )); then
+  fail "e2e_ui judge is only partially configured -- missing:${judge_missing}. Set all of ${JUDGE_VARS[*]}, or none of them to use the deterministic fork-owner fallback."
+fi
+
+if (( judge_set == 0 )); then
+  # No gateway credentials. Upstream always has them, so this is a fork (or a
+  # broken upstream config): say so plainly rather than pretend to judge.
+  if [[ -z "$TRUSTED_FORK_OWNER" ]]; then
+    fail "e2e_ui judge is not configured (needs the OPENAI_BASE_URL/OPENAI_API_KEY secrets and the OMNIGENT_CI_E2E_JUDGE_MODEL repository variable). The judge-free fallback is available only on a fork, to the account that owns it."
+  fi
+
+  if [[ "$(lower "$TRUSTED_FORK_OWNER")" == "$AUTHOR_LC" ]]; then
+    if [[ "$adds_e2e_ui" == "true" ]]; then
+      pass "PASS: no e2e_ui judge configured; fork owner @$AUTHOR's web/** change ships an added/updated tests/e2e_ui/** test. The E2E UI workflow still has to run it green."
+    fi
+    require_waiver "no e2e_ui judge is configured, and this fork-owner PR changes web/** without adding or updating any tests/e2e_ui/** test"
+  fi
+
+  require_waiver "no e2e_ui judge is configured, and the judge-free fallback is limited to the fork owner (@$TRUSTED_FORK_OWNER), not @$AUTHOR"
+fi
+
+# --- 3. LLM judge: behavior change without adequate e2e_ui coverage? ------
 # Build a bounded diff blob: only web/** and tests/e2e_ui/** patches. Each
 # file's patch is truncated to MAX_PATCH_LINES so one huge file can't crowd out
 # the others, keeping the prompt representative across many-file PRs. An
@@ -158,6 +267,7 @@ fi
 
 CONTENT=$(echo "$RESP" | jq -r '.choices[0].message.content // empty')
 # Strip any accidental markdown fencing, then pull the JSON object out.
+# shellcheck disable=SC2016  # the sed script is literal, not a shell expansion
 VERDICT_JSON=$(echo "$CONTENT" | sed -E 's/^```[a-zA-Z]*//; s/```$//' | grep -o '{.*}' | head -1)
 # NB: must not use `.needs_test // empty` -- the `//` operator treats the
 # boolean `false` as absent, which would silently turn a legitimate "no test
@@ -174,40 +284,4 @@ fi
 
 echo "e2e_ui judge -> test required: $REASON"
 
-# --- 3. Skip label present? -----------------------------------------------
-HAS_LABEL=$(gh api "repos/$REPO/pulls/$PR" \
-  --jq '[.labels[].name] | index("skip-e2e-ui-test") != null')
-if [[ "$HAS_LABEL" != "true" ]]; then
-  fail "This PR changes UI behavior (web/**) without a tests/e2e_ui/** test that covers it: $REASON. Add a UI test, or have a maintainer apply the 'skip-e2e-ui-test' label after reviewing your local-run proof."
-fi
-
-# --- 4. Skip label is only effective if a maintainer is on the hook -------
-if [[ -z "${MAINTAINERS// /}" ]]; then
-  fail "'skip-e2e-ui-test' is set but no maintainers are configured in .github/MAINTAINER on main; cannot honor the waiver."
-fi
-
-MAINTAINERS_LC=$(echo "$MAINTAINERS" | tr '[:upper:]' '[:lower:]')
-
-AUTHOR=$(gh pr view "$PR" --repo "$REPO" --json author --jq '.author.login')
-AUTHOR_LC=$(echo "$AUTHOR" | tr '[:upper:]' '[:lower:]')
-for m in $MAINTAINERS_LC; do
-  if [[ "$m" == "$AUTHOR_LC" ]]; then
-    pass "PASS: 'skip-e2e-ui-test' waiver effective -- author @$AUTHOR is a maintainer."
-  fi
-done
-
-# Latest decisive (non-COMMENTED) review per user; effective if a maintainer's
-# latest such review is APPROVED. Matches GitHub's UI: a later COMMENTED review
-# doesn't supersede an approval, but CHANGES_REQUESTED or DISMISSED does.
-APPROVERS=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
-  --jq '[.[] | select(.state != "COMMENTED")] | group_by(.user.login) | map(max_by(.submitted_at)) | .[] | select(.state == "APPROVED") | .user.login')
-for u in $APPROVERS; do
-  u_lc=$(echo "$u" | tr '[:upper:]' '[:lower:]')
-  for m in $MAINTAINERS_LC; do
-    if [[ "$m" == "$u_lc" ]]; then
-      pass "PASS: 'skip-e2e-ui-test' waiver effective -- approved by maintainer @$u."
-    fi
-  done
-done
-
-fail "'skip-e2e-ui-test' is set but not effective: author @$AUTHOR is not a maintainer and no maintainer has approved this PR yet. A maintainer must approve to honor the waiver."
+require_waiver "$REASON"

@@ -1,0 +1,58 @@
+name: Gate Scripts Test
+
+# Offline fixtures for the privileged merge-gate shell scripts: maintainer
+# resolution (including fork-owner trust), the `Maintainer Approval` check, and
+# the `E2E UI Required` gate. `gh` and the LLM gateway are stubbed, so there is
+# no network and no secrets. Runs on `pull_request` (PR head checkout) so it
+# tests the PR's own version of the scripts.
+
+on:
+  pull_request:
+    paths:
+      - .github/scripts/merge-ready/**
+      - .github/scripts/e2e-ui-required/**
+      - .github/scripts/test-support/**
+      - .github/workflows/e2e-ui-required.yml
+      - .github/workflows/maintainer-approval.yml
+      - .github/workflows/gate-scripts-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-scripts-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Maintainer resolution fixtures
+        run: bash .github/scripts/merge-ready/load-maintainers.test.sh
+
+      - name: Maintainer Approval fixtures
+        run: bash .github/scripts/merge-ready/require-approval.test.sh
+
+      - name: E2E UI Required fixtures
+        run: bash .github/scripts/e2e-ui-required/check.test.sh
+
+      # Scoped to the scripts these fixtures cover. SC1091 off: the harness is
+      # sourced through a runtime-computed path shellcheck can't resolve.
+      - name: Shellcheck the gate scripts
+        run: |
+          shellcheck -x -e SC1091 \
+            .github/scripts/merge-ready/load-maintainers.sh \
+            .github/scripts/merge-ready/load-maintainers.test.sh \
+            .github/scripts/merge-ready/require-approval.sh \
+            .github/scripts/merge-ready/require-approval.test.sh \
+            .github/scripts/e2e-ui-required/check.sh \
+            .github/scripts/e2e-ui-required/check.test.sh \
+            .github/scripts/test-support/harness.sh \
+            .github/scripts/test-support/stub-gh.sh \
+            .github/scripts/test-support/stub-curl.sh

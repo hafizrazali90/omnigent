@@ -68,10 +68,13 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           MAINTAINERS: ${{ steps.maintainers.outputs.list }}
-          # OpenAI-compatible gateway (same secrets the e2e suites use).
+          # Empty off a fork; the fork's owner otherwise. From repository
+          # metadata, never from PR input -- see load-maintainers.sh.
+          TRUSTED_FORK_OWNER: ${{ steps.maintainers.outputs.fork_owner }}
+          # OpenAI-compatible gateway (same secrets the e2e suites use). A fork
+          # has none of these; the gate script handles that (all three or none)
+          # rather than the step hard-failing before it can run.
           OPENAI_BASE_URL: ${{ secrets.GATEWAY_BASE_URL }}
           OPENAI_API_KEY: ${{ secrets.LLM_API_KEY }}
           E2E_UI_JUDGE_MODEL: ${{ vars.OMNIGENT_CI_E2E_JUDGE_MODEL }}
-        run: |
-          : "${E2E_UI_JUDGE_MODEL:?Set OMNIGENT_CI_E2E_JUDGE_MODEL repository variable}"
-          bash .github/scripts/e2e-ui-required/check.sh
+        run: bash .github/scripts/e2e-ui-required/check.sh
