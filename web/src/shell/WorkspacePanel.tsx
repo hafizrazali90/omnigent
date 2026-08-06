@@ -38,7 +38,7 @@ import { FileViewer } from "./FileViewer";
 import type { ChangedSort } from "./FlatFileList";
 import { InlineTerminalsSection } from "./InlineTerminalsSection";
 import { SubagentsPanel } from "./SubagentsPanel";
-import { TodoPanel } from "./TodoPanel";
+import { WorkTree } from "./WorkTree";
 import { useTerminalStatuses } from "./useTerminalStatuses";
 import { type RightRailTab, TAB_BADGE_BASE } from "./railTabs";
 
@@ -919,7 +919,7 @@ export function WorkspacePanel({
             changedCount={changedCount}
           />
         ) : rightRailTab === "todos" && todosSupported ? (
-          <TodoPanel frameless />
+          <WorkTree sessionId={conversationId} frameless />
         ) : rightRailTab === "terminals" && showShellsTab ? (
           <InlineTerminalsSection conversationId={conversationId} onExpand={openTerminalTab} />
         ) : (

@@ -17,6 +17,12 @@ from typing import Annotated, Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, Strict, field_validator, model_validator
 
 from omnigent.entities import ConversationItem
+from omnigent.entities.work_item import (
+    DELIVERY_STATES,
+    DISCOVERY_CLASSES,
+    SOURCE_KINDS,
+    WORK_STATUSES,
+)
 
 # ── Shared ──────────────────────────────────────────────────────
 
@@ -3506,6 +3512,30 @@ class SessionPresenceEvent(_SSEEventBase):
     viewers: list[PresenceViewer]
 
 
+class SessionWorkTreeEvent(_SSEEventBase):
+    """
+    The session's durable Work Tree changed — full state, not a delta.
+
+    Emitted on ``GET /v1/sessions/{id}/stream`` after every successful Work Tree
+    mutation, and once to each newly-connected stream as a snapshot-on-connect.
+    Every event carries the COMPLETE tree so clients replace their state
+    wholesale: a client that missed an event, reloaded, or reconnected recovers
+    the current tree without replaying anything.
+
+    Distinct from :class:`SessionTodosEvent`, which is a provider's transient
+    checklist. Provider todos are observations that may update the tree; this
+    event carries the server-owned state that survives them.
+
+    :param type: Always ``"session.work_tree"``.
+    :param conversation_id: The session whose tree this is.
+    :param work_tree: The complete tree, in the ``GET …/work-tree`` shape.
+    """
+
+    type: Literal["session.work_tree"]
+    conversation_id: str
+    work_tree: WorkTree
+
+
 class ElicitationRequestParams(BaseModel):
     """
     Inner ``params`` block of a :class:`ElicitationRequestEvent`.
@@ -4173,6 +4203,7 @@ ServerStreamEvent = Annotated[
     | SessionCreatedEvent
     | SessionSupersededEvent
     | SessionPresenceEvent
+    | SessionWorkTreeEvent
     # ── Transient (SSE-only) — session resource lifecycle ─────
     | SessionResourceCreatedEvent
     | SessionResourceDeletedEvent
@@ -4419,3 +4450,293 @@ class UpdateProjectRequest(BaseModel):
         if len(trimmed) > 100:
             raise ValueError("name must be at most 100 characters")
         return trimmed
+
+
+# ── Work Tree ──────────────────────────────────────────
+#
+# The durable, provider-neutral session Work Tree. ``status`` and
+# ``delivery_state`` are two independent axes on purpose: a green status says
+# the work is finished, never that the change was committed, merged, or
+# deployed. Every mutation carries the ``version`` the caller last saw so two
+# windows can never silently overwrite each other.
+
+
+class WorkItemObject(BaseModel):
+    """One node of a session's Work Tree.
+
+    :param id: Opaque work item identifier.
+    :param object: Discriminator; always ``"work_item"``.
+    :param conversation_id: Owning session. Parent and child always share it.
+    :param parent_id: Parent node, or ``None`` for a top-level item.
+    :param depth: 1-based tree depth; never exceeds 3.
+    :param title: Short plain-language name — the line always shown.
+    :param brief: Optional one-sentence expansion of the title.
+    :param why: Optional reason this matters.
+    :param next_action: Optional concrete next step.
+    :param status: How the work is going: ``not_started``, ``working``,
+        ``waiting``, ``paused``, ``blocked`` or ``done``.
+    :param delivery_state: How far the change has actually travelled
+        (``local`` … ``closed``), or ``None``. Independent of ``status``.
+    :param project_id: Project when it differs from the session's home project;
+        ``None`` means "same as the session".
+    :param source_kind: Where the item came from — ``user``, ``orchestrator``,
+        ``worker``, ``provider_todo``, ``discovered`` or ``resumed``.
+    :param source_ref: Safe provider/orchestrator handle, never a payload.
+    :param discovery_class: How a discovered item relates to the work that
+        surfaced it, or ``None``.
+    :param evidence: Human-readable summary of what proves this item's state.
+    :param sort_order: Position among siblings under the same parent.
+    :param collapsed: The user's collapse preference for this node.
+    :param version: Optimistic-concurrency counter; send it back on mutation.
+    :param created_at: Unix epoch seconds at creation.
+    :param updated_at: Unix epoch seconds of the last write, or ``None``.
+    :param completed_at: Unix epoch seconds the item reached ``done``.
+    :param deferred_at: Unix epoch seconds the item was deferred.
+    """
+
+    id: str
+    object: Literal["work_item"] = "work_item"
+    conversation_id: str
+    parent_id: str | None = None
+    depth: int
+    title: str
+    brief: str | None = None
+    why: str | None = None
+    next_action: str | None = None
+    status: str
+    delivery_state: str | None = None
+    project_id: str | None = None
+    source_kind: str
+    source_ref: str | None = None
+    discovery_class: str | None = None
+    evidence: str | None = None
+    sort_order: int
+    collapsed: bool = False
+    version: int
+    created_at: int
+    updated_at: int | None = None
+    completed_at: int | None = None
+    deferred_at: int | None = None
+
+
+class WorkTree(BaseModel):
+    """Response for ``GET /v1/sessions/{id}/work-tree`` — the full tree.
+
+    Always full state, never a delta: a client that missed an event recovers
+    completely from the next payload it receives.
+
+    :param object: Discriminator; always ``"work_tree"``.
+    :param session_id: The session this tree belongs to.
+    :param data: Every item, parents before their children.
+    :param related_project_ids: Secondary projects this session touches,
+        alongside its first-class home project.
+    """
+
+    object: Literal["work_tree"] = "work_tree"
+    session_id: str
+    data: list[WorkItemObject] = Field(default_factory=list)
+    related_project_ids: list[str] = Field(default_factory=list)
+
+
+def _validated_vocabulary(value: str | None, allowed: tuple[str, ...], field: str) -> str | None:
+    """Refuse a value outside a Work Tree vocabulary at the API boundary.
+
+    Validating here keeps an unknown value a 422 the caller can act on, rather
+    than a 500 from the store's codec. The tuples in
+    :mod:`omnigent.entities.work_item` stay the single source of truth.
+
+    :param value: The submitted value, or ``None``.
+    :param allowed: The closed vocabulary the value must belong to.
+    :param field: Field name, used in the error message.
+    :returns: The value unchanged.
+    :raises ValueError: If the value is outside ``allowed``.
+    """
+    if value is not None and value not in allowed:
+        raise ValueError(f"{field} must be one of: {', '.join(allowed)}")
+    return value
+
+
+def _reject_explicit_null(value: object, field: str) -> None:
+    """Refuse an explicit ``null`` for a field that cannot be cleared.
+
+    Validators do not run on unset fields, so reaching here with ``None`` means
+    the client really sent ``"field": null``. Saying so is far more useful than
+    treating it as "leave unchanged" or coercing it to a default.
+
+    :param value: The submitted value.
+    :param field: Field name, used in the error message.
+    :raises ValueError: If the value is ``None``.
+    """
+    if value is None:
+        raise ValueError(f"{field} must not be null; omit it to leave it unchanged")
+
+
+class WorkItemCreate(BaseModel):
+    """Request body for ``POST /v1/sessions/{id}/work-items``.
+
+    :param title: Short plain-language name; required, trimmed, non-empty.
+    :param parent_id: Parent item, or ``None`` for a top-level item.
+    :param brief: Optional one-sentence expansion of the title.
+    :param why: Optional reason this matters.
+    :param next_action: Optional concrete next step.
+    :param status: Initial work status; defaults to ``not_started``.
+    :param delivery_state: Optional initial delivery state.
+    :param project_id: Project when it differs from the session's home project.
+    :param source_kind: Where the item came from; defaults to ``user``.
+    :param source_ref: Safe provider/orchestrator handle, never a payload.
+    :param discovery_class: Optional relation to the work that found it.
+    :param evidence: Optional human-readable evidence summary.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    parent_id: str | None = None
+    brief: str | None = None
+    why: str | None = None
+    next_action: str | None = None
+    status: str = "not_started"
+    delivery_state: str | None = None
+    project_id: str | None = None
+    source_kind: str = "user"
+    source_ref: str | None = None
+    discovery_class: str | None = None
+    evidence: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _validate_title(cls, value: str) -> str:
+        """Trim the title and refuse a blank one.
+
+        :param value: The raw title from the request.
+        :returns: The trimmed title.
+        :raises ValueError: If the title is empty or whitespace-only.
+        """
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("title must not be empty")
+        return trimmed
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, value: str) -> str:
+        """Refuse a status outside the work vocabulary."""
+        return _validated_vocabulary(value, WORK_STATUSES, "status")  # type: ignore[return-value]
+
+    @field_validator("delivery_state")
+    @classmethod
+    def _validate_delivery_state(cls, value: str | None) -> str | None:
+        """Refuse a delivery state outside the delivery vocabulary."""
+        return _validated_vocabulary(value, DELIVERY_STATES, "delivery_state")
+
+    @field_validator("source_kind")
+    @classmethod
+    def _validate_source_kind(cls, value: str) -> str:
+        """Refuse a source kind outside the source vocabulary."""
+        return _validated_vocabulary(value, SOURCE_KINDS, "source_kind")  # type: ignore[return-value]
+
+    @field_validator("discovery_class")
+    @classmethod
+    def _validate_discovery_class(cls, value: str | None) -> str | None:
+        """Refuse a discovery class outside the discovery vocabulary."""
+        return _validated_vocabulary(value, DISCOVERY_CLASSES, "discovery_class")
+
+
+class WorkItemUpdate(BaseModel):
+    """Request body for ``PATCH /v1/sessions/{id}/work-items/{item_id}``.
+
+    Only the fields present in the request change. ``version`` is required: a
+    request carrying a version the server has moved past is rejected with 409
+    and the caller re-reads rather than clobbering someone else's edit.
+
+    ``sort_index`` is the reorder channel — it moves the item among its own
+    siblings and never re-parents it.
+
+    ``title``, ``status``, ``collapsed`` and ``sort_index`` are not nullable, so
+    an explicit ``null`` is a 422 naming the field rather than a silent no-op or
+    a coerced ``False``. Omit the field to leave it unchanged; the genuinely
+    optional fields still take ``null`` to clear them.
+
+    :param version: The version the caller last saw.
+    :param title: New title, if changing.
+    :param brief: New brief, or ``None`` to clear it.
+    :param why: New reason, or ``None`` to clear it.
+    :param next_action: New next step, or ``None`` to clear it.
+    :param status: New work status.
+    :param delivery_state: New delivery state, or ``None`` to clear it.
+    :param project_id: New project assignment, or ``None`` to fall back to the
+        session's home project.
+    :param discovery_class: New discovery class, or ``None`` to clear it.
+    :param evidence: New evidence summary, or ``None`` to clear it.
+    :param collapsed: New collapse preference.
+    :param sort_index: New 0-based position among the item's siblings.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: int
+    title: str | None = None
+    brief: str | None = None
+    why: str | None = None
+    next_action: str | None = None
+    status: str | None = None
+    delivery_state: str | None = None
+    project_id: str | None = None
+    discovery_class: str | None = None
+    evidence: str | None = None
+    collapsed: bool | None = None
+    sort_index: int | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _validate_title(cls, value: str | None) -> str | None:
+        """Trim the title and refuse a blank or explicitly null one."""
+        _reject_explicit_null(value, "title")
+        trimmed = (value or "").strip()
+        if not trimmed:
+            raise ValueError("title must not be empty")
+        return trimmed
+
+    @field_validator("status")
+    @classmethod
+    def _validate_status(cls, value: str | None) -> str | None:
+        """Refuse a status outside the work vocabulary, or an explicit null."""
+        _reject_explicit_null(value, "status")
+        return _validated_vocabulary(value, WORK_STATUSES, "status")
+
+    @field_validator("collapsed")
+    @classmethod
+    def _validate_collapsed(cls, value: bool | None) -> bool | None:
+        """Refuse an explicit null rather than quietly reading it as ``False``."""
+        _reject_explicit_null(value, "collapsed")
+        return value
+
+    @field_validator("sort_index")
+    @classmethod
+    def _validate_sort_index(cls, value: int | None) -> int | None:
+        """Refuse an explicit null rather than quietly skipping the reorder."""
+        _reject_explicit_null(value, "sort_index")
+        return value
+
+    @field_validator("delivery_state")
+    @classmethod
+    def _validate_delivery_state(cls, value: str | None) -> str | None:
+        """Refuse a delivery state outside the delivery vocabulary."""
+        return _validated_vocabulary(value, DELIVERY_STATES, "delivery_state")
+
+    @field_validator("discovery_class")
+    @classmethod
+    def _validate_discovery_class(cls, value: str | None) -> str | None:
+        """Refuse a discovery class outside the discovery vocabulary."""
+        return _validated_vocabulary(value, DISCOVERY_CLASSES, "discovery_class")
+
+
+class WorkItemVersion(BaseModel):
+    """Request body for the defer/resume and delete endpoints.
+
+    :param version: The version the caller last saw.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: int

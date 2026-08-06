@@ -165,9 +165,21 @@ vi.mock("@/components/blocks/TerminalView", () => ({
     <div data-testid="terminal-view-stub">{terminalId}</div>
   ),
 }));
-vi.mock("./TodoPanel", () => ({
-  TodoPanel: () => <div data-testid="todo-panel" />,
+vi.mock("./WorkTree", () => ({
+  WorkTree: () => <div data-testid="work-tree-panel" />,
 }));
+// The Tasks tab is gated on the durable Work Tree, so these tests seed items
+// through the hook rather than the transient provider checklist.
+const workTreeItemsMock = vi.hoisted(() => ({ current: [] as { id: string; status: string }[] }));
+vi.mock("@/hooks/useWorkTree", () => ({
+  useWorkTree: () => ({ items: workTreeItemsMock.current }),
+  workTreeQueryKey: (sessionId: string | null | undefined) => ["work-tree", sessionId],
+}));
+
+/** Seed the durable Work Tree the Tasks tab reads. */
+function seedWorkTree(titles: { status: string }[]) {
+  workTreeItemsMock.current = titles.map((t, i) => ({ id: `wi_${i}`, status: t.status }));
+}
 vi.mock("./FilesPanelDrawer", () => ({
   FilesPanelDrawer: ({ open, flatView }: { open: boolean; flatView: boolean }) => (
     <div
@@ -472,8 +484,9 @@ beforeEach(() => {
   // choice carries across sessions. Clear it so a stored preference from one
   // test can't change another test's default scope.
   localStorage.clear();
-  // The Tasks tab/drawer gates on chatStore.todos; reset so a populated
-  // todo list from one test doesn't leak into the next.
+  // The Tasks tab/drawer gates on the durable Work Tree; reset so a populated
+  // tree from one test doesn't leak into the next.
+  workTreeItemsMock.current = [];
   // Reset terminal-first startup signals so one test's terminalPending /
   // failed status can't leak into another's terminalStartingUp.
   useChatStore.setState({
@@ -2791,12 +2804,7 @@ describe("Mobile session menu", () => {
       isLoading: false,
       error: null,
     });
-    useChatStore.setState({
-      todos: [
-        { content: "do a thing", status: "completed", activeForm: "doing a thing" },
-        { content: "do another", status: "pending", activeForm: "doing another" },
-      ],
-    });
+    seedWorkTree([{ status: "done" }, { status: "not_started" }]);
 
     renderShell("/c/conv_native");
     openSessionMenu();
@@ -2954,13 +2962,14 @@ describe("Mobile session menu", () => {
       },
     ]);
     useChatStore.setState({
-      todos: [{ content: "build the thing", status: "in_progress", activeForm: "building" }],
+      todos: [],
     });
+    seedWorkTree([{ status: "working" }]);
 
     renderShell("/c/conv_native");
 
     expect(screen.getByTestId("todos-panel-drawer")).toHaveAttribute("data-state", "closed");
-    expect(screen.queryByTestId("todo-panel")).toBeNull();
+    expect(screen.queryByTestId("work-tree-panel")).toBeNull();
 
     openSessionMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: /Tasks/i }));
@@ -2968,7 +2977,7 @@ describe("Mobile session menu", () => {
     // Failure: openTodosPanel didn't set todosPanelOpen, or the Tasks entry
     // was gated out despite isClaudeNative + a non-empty todo list.
     expect(screen.getByTestId("todos-panel-drawer")).toHaveAttribute("data-state", "open");
-    expect(screen.getByTestId("todo-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("work-tree-panel")).toBeInTheDocument();
   });
 
   it.each([
@@ -2987,8 +2996,9 @@ describe("Mobile session menu", () => {
       },
     ]);
     useChatStore.setState({
-      todos: [{ content: "Locate CLI parser", status: "in_progress", activeForm: "Locating" }],
+      todos: [],
     });
+    seedWorkTree([{ status: "working" }]);
 
     renderShell(`/c/${id}`);
     expect(screen.getByTestId("todos-panel-drawer")).toHaveAttribute("data-state", "closed");
@@ -2997,7 +3007,7 @@ describe("Mobile session menu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Tasks/i }));
 
     expect(screen.getByTestId("todos-panel-drawer")).toHaveAttribute("data-state", "open");
-    expect(screen.getByTestId("todo-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("work-tree-panel")).toBeInTheDocument();
   });
 
   it("keeps the FAB with only the Agents entry for a minimal agent", () => {

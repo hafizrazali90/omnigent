@@ -22,6 +22,7 @@ from omnigent.entities.conversation import (
     parse_item_data,
 )
 from omnigent.errors import ErrorCode, OmnigentError
+from omnigent.harness_plugins import native_agents
 from omnigent.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE as _HARNESS_NOT_CONFIGURED_ERROR_CODE,
 )
@@ -77,6 +78,7 @@ from omnigent.server.routes._errors import session_not_found as _session_not_fou
 from omnigent.server.routes._sessions.common import (
     _ALLOWED_EVENT_TYPES,
     _APPROVAL_TYPE,
+    _CLAUDE_NATIVE_WRAPPER_LABEL_KEY,
     _COMPACT_TYPE,
     _EXTERNAL_ASSISTANT_MESSAGE_TYPE,
     _EXTERNAL_CODEX_APPROVAL_MODE_CHANGE_TYPE,
@@ -184,6 +186,11 @@ from omnigent.server.routes._sessions.orchestration import (
     _resolve_elicitation,
     _wait_for_host_bound_runner_client,
 )
+from omnigent.server.routes.sessions.routes_work_tree import (
+    publish_work_tree,
+    read_work_tree,
+    work_tree_event,
+)
 from omnigent.server.schemas import (
     ConversationDeleted,
     ElicitationRequestEvent,
@@ -199,11 +206,29 @@ from omnigent.stores import AgentStore, ConversationStore
 from omnigent.stores.artifact_store import ArtifactStore
 from omnigent.stores.file_store import FileStore
 from omnigent.stores.permission_store import PermissionStore
+from omnigent.stores.work_tree_store import WorkTreeStore
 from omnigent.telemetry import emit as _tel_emit
 from omnigent.telemetry.events import SessionDeletedEvent as _TelSessionDeletedEvent
 from omnigent.telemetry.events import SessionStoppedEvent as _TelSessionStoppedEvent
 from omnigent.telemetry.installation_id import get_installation_id as _get_installation_id
 from omnigent.tools.client_specified import parse_client_side_tool_specs
+from omnigent.work_tree_observations import apply_provider_todos
+
+
+def _observation_provider(conv: Any) -> str:
+    """Name the provider behind a todo observation, for audit and re-matching.
+
+    Falls back to the raw wrapper label (or ``"provider"``) so an unregistered
+    harness still gets a stable namespace rather than colliding with another.
+
+    :param conv: The conversation the observation arrived on.
+    :returns: A short provider key, e.g. ``"claude"`` or ``"codex"``.
+    """
+    wrapper = (getattr(conv, "labels", None) or {}).get(_CLAUDE_NATIVE_WRAPPER_LABEL_KEY)
+    for agent in native_agents():
+        if wrapper in (agent.wrapper_label, agent.subagent_wrapper_label):
+            return agent.key
+    return wrapper or "provider"
 
 
 def register_events_routes(
@@ -222,8 +247,38 @@ def register_events_routes(
     host_registry: HostRegistry | None = None,
     background_title_coordinator: BackgroundSessionTitleCoordinator | None = None,
     runner_tunnel_tokens: frozenset[str] | None = None,
+    work_tree_store: WorkTreeStore | None = None,
 ) -> None:
     """Register the events, stream, and delete routes on router."""
+
+    async def _record_work_tree_observation(
+        session_id: str, conv: Any, body: SessionEventInput
+    ) -> None:
+        """Fold a provider todo list into the durable tree and republish it.
+
+        Best-effort: the transient panel has already been updated, so a store
+        hiccup here must never fail the forwarder's event post.
+        """
+        if work_tree_store is None:
+            return
+        todos = body.data.get("todos")
+        if not isinstance(todos, list):
+            return
+        provider = _observation_provider(conv)
+        try:
+            changed = await asyncio.to_thread(
+                apply_provider_todos,
+                work_tree_store,
+                session_id,
+                todos,
+                provider=provider,
+            )
+            if changed:
+                await publish_work_tree(work_tree_store, session_id)
+        except Exception:
+            _logger.debug(
+                "work tree: %s observation failed for %s", provider, session_id, exc_info=True
+            )
 
     def _has_runner_created_by_authority(request: Request, conv: Any) -> bool:
         token = (request.headers.get(RUNNER_TUNNEL_TOKEN_HEADER) or "").strip()
@@ -1054,6 +1109,9 @@ def register_events_routes(
             return {"queued": False}
         if body.type == _EXTERNAL_SESSION_TODOS_TYPE:
             _handle_external_session_todos(session_id, body)
+            # The transient panel above is the provider's own view. Feed the
+            # same list to the durable tree, which owns what survives it.
+            await _record_work_tree_observation(session_id, conv, body)
             return {"queued": False}
         if body.type == _EXTERNAL_SUBAGENT_START_TYPE:
             child_id = await _persist_external_subagent_start(
@@ -1667,6 +1725,15 @@ def register_events_routes(
             # edge to learn who's here. Scoped to the session tree's root
             # so a sub-agent page sees viewers of every agent in the tree.
             events.append(presence.snapshot(conv.root_conversation_id, session_id))
+            # Full Work Tree on connect. Without it a client that reloaded, or
+            # whose stream dropped while an item changed, would show a stale
+            # tree until the next unrelated mutation happened to fire.
+            if work_tree_store is not None:
+                try:
+                    tree = await read_work_tree(work_tree_store, session_id)
+                    events.append(work_tree_event(tree))
+                except Exception:
+                    _logger.debug("snapshot: work tree failed for %s", session_id, exc_info=True)
             return events
 
         return StreamingResponse(

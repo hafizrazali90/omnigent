@@ -52,6 +52,7 @@ import type {
   SessionReasoningEffortEvent,
   SessionAgentChangedEvent,
   SessionTodosEvent,
+  SessionWorkTreeEvent,
   SessionSandboxStatusEvent,
   McpServerStartup,
   SessionMcpStartupEvent,
@@ -69,6 +70,8 @@ import type {
 import { NATIVE_TOOL_TYPES } from "./events";
 import { routingExtrasFromWire } from "./routingDecision";
 import type { ErrorInfo, ModelUsage, RememberScope, Response } from "./types";
+import type { WorkTreeWire } from "./workTreeApi";
+import { workTreeFromWire } from "./workTreeApi";
 
 /**
  * Out-param for `parseSseStream`: `sawDone` is set when the server's `[DONE]`
@@ -586,6 +589,21 @@ export function parseEvent(rawType: string, data: Record<string, unknown>): Stre
       conversationId,
       todos,
     } satisfies SessionTodosEvent;
+  }
+  if (eventType === "session.work_tree") {
+    const conversationId = data.conversation_id;
+    if (typeof conversationId !== "string" || !conversationId) return null;
+    const wire = data.work_tree;
+    // A malformed frame is dropped rather than blanking a tree the user is
+    // reading; the next event or a reconnect restores full state anyway.
+    if (wire === null || typeof wire !== "object" || !Array.isArray((wire as WorkTreeWire).data)) {
+      return null;
+    }
+    return {
+      type: "session_work_tree",
+      conversationId,
+      workTree: workTreeFromWire(wire as WorkTreeWire),
+    } satisfies SessionWorkTreeEvent;
   }
   if (eventType === "session.terminal_pending") {
     const conversationId = data.conversation_id;

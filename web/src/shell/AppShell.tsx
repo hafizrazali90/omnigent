@@ -80,7 +80,8 @@ import {
   type TerminalFirstContextValue,
 } from "./TerminalFirstContext";
 import { TerminalsPanel } from "./TerminalsPanel";
-import { TodoPanel } from "./TodoPanel";
+import { WorkTree } from "./WorkTree";
+import { useWorkTree } from "@/hooks/useWorkTree";
 import { PermissionsModal } from "@/components/PermissionsModal";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { CommandPalette } from "./CommandPalette";
@@ -368,15 +369,17 @@ export function AppShell() {
   const sessionLabels = { ...activeConv?.labels, ...activeSession?.labels };
   const terminalFirst = sessionLabels["omnigent.ui"] === "terminal";
   const isClaudeNative = sessionLabels["omnigent.wrapper"] === "claude-code-native-ui";
-  const todos = useChatStore((s) => s.todos);
-  // The session.todos contract is harness-agnostic; show Tasks when it has data.
-  const todosSupported = todos.length > 0;
+  // The Tasks tab now shows the durable Work Tree. Provider todo events feed
+  // that tree server-side, so gating on it covers both agent-driven and
+  // user-created work — and the tab survives a provider that forgets its list.
+  const workTreeItems = useWorkTree(conversationId).items;
+  const todosSupported = workTreeItems.length > 0;
   // Native-CLI wrapper of either family. Keys harness behavior gates
   // (composer slash commands, `/model`); terminal-first SDK sessions
   // (embedded Omnigent REPL terminal) have NO wrapper label and must
   // keep regular chat behavior. See TerminalFirstContext.tsx.
   const isNativeWrapper = isNativeWrapperLabel(sessionLabels["omnigent.wrapper"]);
-  const todosCompleted = todos.filter((t) => t.status === "completed").length;
+  const todosCompleted = workTreeItems.filter((item) => item.status === "done").length;
   // Used for the header "Back to parent" link, which is hidden on
   // top-level sessions. The Subagents tab itself is always visible —
   // it lists the root's children plus a "main" entry, so the user
@@ -538,9 +541,9 @@ export function AppShell() {
         // ``railTerminals`` starts empty while the agent loads, so native
         // sessions don't flash the tab.
         terminals: !hideTerminalsTab && railTerminals.length > 0,
-        todos: todosSupported && todos.length > 0,
+        todos: todosSupported,
       }) as const,
-    [showFilesPanel, hideTerminalsTab, railTerminals.length, todosSupported, todos.length],
+    [showFilesPanel, hideTerminalsTab, railTerminals.length, todosSupported],
   );
   // Whether the rail has anything at all to show. When false the workspace
   // card doesn't mount and the header hides its collapse toggle — a
@@ -1455,7 +1458,7 @@ export function AppShell() {
                     terminalsLength: railTerminals.length,
                     todosSupported,
                     todosCompleted,
-                    todosTotal: todos.length,
+                    todosTotal: workTreeItems.length,
                     debugMode,
                     changedCount,
                     subagentsWorking,
@@ -1512,7 +1515,7 @@ export function AppShell() {
                     agentCount={agentCount}
                     todosSupported={todosSupported}
                     todosCompleted={todosCompleted}
-                    todosTotal={todos.length}
+                    todosTotal={workTreeItems.length}
                     rootSessionId={rootSessionId}
                     selectedFilePath={selectedFilePath}
                     openFiles={openFiles}
@@ -1617,7 +1620,7 @@ export function AppShell() {
                   onClose={() => setTodosPanelOpen(false)}
                   testId="todos-panel-drawer"
                 >
-                  <TodoPanel frameless />
+                  <WorkTree sessionId={conversationId} frameless />
                 </MobilePanelDrawer>
               )}
               {/* Mobile-only push panel — on desktop the viewer lives inside the inline aside. */}

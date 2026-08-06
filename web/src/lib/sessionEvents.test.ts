@@ -29,6 +29,7 @@ import type {
   SessionTerminalActivityEvent,
   SessionTerminalPendingEvent,
   SessionTodosEvent,
+  SessionWorkTreeEvent,
   SessionUsageEvent,
   SlashCommand,
   RoutingDecision,
@@ -1108,6 +1109,83 @@ describe("session.usage (FLAT envelope)", () => {
       usage_by_model: { "model-a": 1000 },
     });
     expect(out).toEqual([]);
+  });
+});
+
+describe("session.work_tree (FLAT envelope)", () => {
+  const wireItem = {
+    id: "wi_1",
+    conversation_id: "conv_abc",
+    parent_id: null,
+    depth: 1,
+    title: "Ship the work tree",
+    brief: null,
+    why: null,
+    next_action: null,
+    status: "working",
+    delivery_state: "merged",
+    project_id: null,
+    source_kind: "provider_todo",
+    source_ref: null,
+    discovery_class: null,
+    evidence: null,
+    sort_order: 0,
+    collapsed: false,
+    version: 2,
+    created_at: 1,
+    updated_at: 2,
+    completed_at: null,
+    deferred_at: null,
+  };
+
+  it("lifts the full tree, converting the wire shape", () => {
+    const out = parse("session.work_tree", {
+      type: "session.work_tree",
+      conversation_id: "conv_abc",
+      work_tree: {
+        object: "work_tree",
+        session_id: "conv_abc",
+        data: [wireItem],
+        related_project_ids: ["proj_1"],
+      },
+    });
+    expect(out).toHaveLength(1);
+    const ev = out[0] as SessionWorkTreeEvent;
+    expect(ev.type).toBe("session_work_tree");
+    expect(ev.conversationId).toBe("conv_abc");
+    expect(ev.workTree.items).toHaveLength(1);
+    expect(ev.workTree.items[0].title).toBe("Ship the work tree");
+    // The two axes stay apart across the wire boundary too.
+    expect(ev.workTree.items[0].status).toBe("working");
+    expect(ev.workTree.items[0].deliveryState).toBe("merged");
+    expect(ev.workTree.relatedProjectIds).toEqual(["proj_1"]);
+  });
+
+  it("carries an empty tree for a session with no tracked work", () => {
+    const out = parse("session.work_tree", {
+      type: "session.work_tree",
+      conversation_id: "conv_abc",
+      work_tree: { object: "work_tree", session_id: "conv_abc", data: [], related_project_ids: [] },
+    });
+    expect((out[0] as SessionWorkTreeEvent).workTree.items).toEqual([]);
+  });
+
+  it("drops a frame with no conversation id", () => {
+    expect(
+      parse("session.work_tree", { type: "session.work_tree", work_tree: { data: [] } }),
+    ).toEqual([]);
+  });
+
+  it("drops a malformed frame rather than blanking the tree", () => {
+    // WHY: the rail is showing real work. A bad frame must leave it alone —
+    // the next event or a reconnect restores full state anyway.
+    expect(
+      parse("session.work_tree", {
+        type: "session.work_tree",
+        conversation_id: "conv_abc",
+        work_tree: { session_id: "conv_abc" },
+      }),
+    ).toEqual([]);
   });
 });
 

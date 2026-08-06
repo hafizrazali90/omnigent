@@ -3446,6 +3446,7 @@
             "session.terminal_pending": "#/components/schemas/SessionTerminalPendingEvent",
             "session.todos": "#/components/schemas/SessionTodosEvent",
             "session.usage": "#/components/schemas/SessionUsageEvent",
+            "session.work_tree": "#/components/schemas/SessionWorkTreeEvent",
             "turn.cancelled": "#/components/schemas/TurnCancelledEvent",
             "turn.completed": "#/components/schemas/TurnCompletedEvent",
             "turn.failed": "#/components/schemas/TurnFailedEvent",
@@ -3504,6 +3505,9 @@
           },
           {
             "$ref": "#/components/schemas/SessionPresenceEvent"
+          },
+          {
+            "$ref": "#/components/schemas/SessionWorkTreeEvent"
           },
           {
             "$ref": "#/components/schemas/SessionResourceCreatedEvent"
@@ -5926,6 +5930,45 @@
         "title": "SessionUsageEvent",
         "type": "object"
       },
+      "SessionWorkTreeEvent": {
+        "description": "The session's durable Work Tree changed \u2014 full state, not a delta.\n\nEmitted on `GET /v1/sessions/{id}/stream` after every successful Work Tree\nmutation, and once to each newly-connected stream as a snapshot-on-connect.\nEvery event carries the COMPLETE tree so clients replace their state\nwholesale: a client that missed an event, reloaded, or reconnected recovers\nthe current tree without replaying anything.\n\nDistinct from `SessionTodosEvent`, which is a provider's transient\nchecklist. Provider todos are observations that may update the tree; this\nevent carries the server-owned state that survives them.",
+        "properties": {
+          "conversation_id": {
+            "description": "The session whose tree this is.",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "sequence_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sequence Number"
+          },
+          "type": {
+            "const": "session.work_tree",
+            "description": "Always `\"session.work_tree\"`.",
+            "title": "Type",
+            "type": "string"
+          },
+          "work_tree": {
+            "$ref": "#/components/schemas/WorkTree",
+            "description": "The complete tree, in the `GET \u2026/work-tree` shape."
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "work_tree"
+        ],
+        "title": "SessionWorkTreeEvent",
+        "type": "object"
+      },
       "SetCodexGoalRequest": {
         "additionalProperties": false,
         "description": "Request body for `PUT /v1/sessions/{id}/codex_goal`.",
@@ -6977,6 +7020,564 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkItemCreate": {
+        "additionalProperties": false,
+        "description": "Request body for `POST /v1/sessions/{id}/work-items`.",
+        "properties": {
+          "brief": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional one-sentence expansion of the title.",
+            "title": "Brief"
+          },
+          "delivery_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional initial delivery state.",
+            "title": "Delivery State"
+          },
+          "discovery_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional relation to the work that found it.",
+            "title": "Discovery Class"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional human-readable evidence summary.",
+            "title": "Evidence"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional concrete next step.",
+            "title": "Next Action"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent item, or `None` for a top-level item.",
+            "title": "Parent Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Project when it differs from the session's home project.",
+            "title": "Project Id"
+          },
+          "source_kind": {
+            "default": "user",
+            "description": "Where the item came from; defaults to `user`.",
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Safe provider/orchestrator handle, never a payload.",
+            "title": "Source Ref"
+          },
+          "status": {
+            "default": "not_started",
+            "description": "Initial work status; defaults to `not_started`.",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "Short plain-language name; required, trimmed, non-empty.",
+            "title": "Title",
+            "type": "string"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional reason this matters.",
+            "title": "Why"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "WorkItemCreate",
+        "type": "object"
+      },
+      "WorkItemObject": {
+        "description": "One node of a session's Work Tree.",
+        "properties": {
+          "brief": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional one-sentence expansion of the title.",
+            "title": "Brief"
+          },
+          "collapsed": {
+            "default": false,
+            "description": "The user's collapse preference for this node.",
+            "title": "Collapsed",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unix epoch seconds the item reached `done`.",
+            "title": "Completed At"
+          },
+          "conversation_id": {
+            "description": "Owning session. Parent and child always share it.",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Unix epoch seconds at creation.",
+            "title": "Created At",
+            "type": "integer"
+          },
+          "deferred_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unix epoch seconds the item was deferred.",
+            "title": "Deferred At"
+          },
+          "delivery_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How far the change has actually travelled (`local` \u2026 `closed`), or `None`. Independent of `status`.",
+            "title": "Delivery State"
+          },
+          "depth": {
+            "description": "1-based tree depth; never exceeds 3.",
+            "title": "Depth",
+            "type": "integer"
+          },
+          "discovery_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How a discovered item relates to the work that surfaced it, or `None`.",
+            "title": "Discovery Class"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Human-readable summary of what proves this item's state.",
+            "title": "Evidence"
+          },
+          "id": {
+            "description": "Opaque work item identifier.",
+            "title": "Id",
+            "type": "string"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional concrete next step.",
+            "title": "Next Action"
+          },
+          "object": {
+            "const": "work_item",
+            "default": "work_item",
+            "description": "Discriminator; always `\"work_item\"`.",
+            "title": "Object",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent node, or `None` for a top-level item.",
+            "title": "Parent Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Project when it differs from the session's home project; `None` means \"same as the session\".",
+            "title": "Project Id"
+          },
+          "sort_order": {
+            "description": "Position among siblings under the same parent.",
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "source_kind": {
+            "description": "Where the item came from \u2014 `user`, `orchestrator`, `worker`, `provider_todo`, `discovered` or `resumed`.",
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Safe provider/orchestrator handle, never a payload.",
+            "title": "Source Ref"
+          },
+          "status": {
+            "description": "How the work is going: `not_started`, `working`, `waiting`, `paused`, `blocked` or `done`.",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "Short plain-language name \u2014 the line always shown.",
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unix epoch seconds of the last write, or `None`.",
+            "title": "Updated At"
+          },
+          "version": {
+            "description": "Optimistic-concurrency counter; send it back on mutation.",
+            "title": "Version",
+            "type": "integer"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional reason this matters.",
+            "title": "Why"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "depth",
+          "title",
+          "status",
+          "source_kind",
+          "sort_order",
+          "version",
+          "created_at"
+        ],
+        "title": "WorkItemObject",
+        "type": "object"
+      },
+      "WorkItemUpdate": {
+        "additionalProperties": false,
+        "description": "Request body for `PATCH /v1/sessions/{id}/work-items/{item_id}`.\n\nOnly the fields present in the request change. `version` is required: a\nrequest carrying a version the server has moved past is rejected with 409\nand the caller re-reads rather than clobbering someone else's edit.\n\n`sort_index` is the reorder channel \u2014 it moves the item among its own\nsiblings and never re-parents it.\n\n`title`, `status`, `collapsed` and `sort_index` are not nullable, so\nan explicit `null` is a 422 naming the field rather than a silent no-op or\na coerced `False`. Omit the field to leave it unchanged; the genuinely\noptional fields still take `null` to clear them.",
+        "properties": {
+          "brief": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New brief, or `None` to clear it.",
+            "title": "Brief"
+          },
+          "collapsed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New collapse preference.",
+            "title": "Collapsed"
+          },
+          "delivery_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New delivery state, or `None` to clear it.",
+            "title": "Delivery State"
+          },
+          "discovery_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New discovery class, or `None` to clear it.",
+            "title": "Discovery Class"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New evidence summary, or `None` to clear it.",
+            "title": "Evidence"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New next step, or `None` to clear it.",
+            "title": "Next Action"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New project assignment, or `None` to fall back to the session's home project.",
+            "title": "Project Id"
+          },
+          "sort_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New 0-based position among the item's siblings.",
+            "title": "Sort Index"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New work status.",
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New title, if changing.",
+            "title": "Title"
+          },
+          "version": {
+            "description": "The version the caller last saw.",
+            "title": "Version",
+            "type": "integer"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New reason, or `None` to clear it.",
+            "title": "Why"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "WorkItemUpdate",
+        "type": "object"
+      },
+      "WorkItemVersion": {
+        "additionalProperties": false,
+        "description": "Request body for the defer/resume and delete endpoints.",
+        "properties": {
+          "version": {
+            "description": "The version the caller last saw.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "WorkItemVersion",
+        "type": "object"
+      },
+      "WorkTree": {
+        "description": "Response for `GET /v1/sessions/{id}/work-tree` \u2014 the full tree.\n\nAlways full state, never a delta: a client that missed an event recovers\ncompletely from the next payload it receives.",
+        "properties": {
+          "data": {
+            "description": "Every item, parents before their children.",
+            "items": {
+              "$ref": "#/components/schemas/WorkItemObject"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "object": {
+            "const": "work_tree",
+            "default": "work_tree",
+            "description": "Discriminator; always `\"work_tree\"`.",
+            "title": "Object",
+            "type": "string"
+          },
+          "related_project_ids": {
+            "description": "Secondary projects this session touches, alongside its first-class home project.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Related Project Ids",
+            "type": "array"
+          },
+          "session_id": {
+            "description": "The session this tree belongs to.",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "WorkTree",
         "type": "object"
       }
     },
@@ -12232,6 +12833,356 @@
           }
         },
         "summary": "Switch Session Agent",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/work-items": {
+      "post": {
+        "description": "Create one item, appended after its existing siblings.\n\n**Parameters**\n\n- `body` \u2014 The item to create.\n\n**Returns:** The created `WorkItemObject`.\n\n**Raises**\n\n- `OmnigentError` \u2014 404 if no session exists or the parent is not in it; 400 for a blank title, an unknown enum value, or a parent that would create a fourth level.",
+        "operationId": "create_work_item_v1_sessions__session_id__work_items_post",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemObject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Work Item",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/work-items/{item_id}": {
+      "delete": {
+        "description": "Delete a childless item. A parent with children fails with 409.\n\n**Returns:** `204 No Content`.\n\n**Raises**\n\n- `OmnigentError` \u2014 404 if the item is not in this session; 409 if the version is stale or the item still has children.",
+        "operationId": "delete_work_item_v1_sessions__session_id__work_items__item_id__delete",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The item to delete.",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The version the caller last saw.",
+            "in": "query",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Work Item",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "patch": {
+        "description": "Apply a partial update, or reorder the item among its siblings.\n\nThe caller's `version` is checked first; a stale write is rejected\nwith 409 rather than silently overwriting a concurrent edit. Fields and\n`sort_index` are one store call, so a request carrying both either\napplies whole and broadcasts once, or applies not at all.\n\n**Parameters**\n\n- `body` \u2014 The fields to change and the version last seen.\n\n**Returns:** The updated `WorkItemObject`.\n\n**Raises**\n\n- `OmnigentError` \u2014 404 if the item is not in this session; 409 if the version is stale; 400 for an unknown enum value.",
+        "operationId": "update_work_item_v1_sessions__session_id__work_items__item_id__patch",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The item to update.",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkItemUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemObject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Work Item",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/work-items/{item_id}/defer": {
+      "post": {
+        "description": "Defer an item \u2014 paused, with a deferred stamp, in one step.\n\n**Parameters**\n\n- `body` \u2014 The version the caller last saw.\n\n**Returns:** The deferred `WorkItemObject`.\n\n**Raises**\n\n- `OmnigentError` \u2014 404 if the item is not in this session; 409 if the version is stale.",
+        "operationId": "defer_work_item_v1_sessions__session_id__work_items__item_id__defer_post",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The item to defer.",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkItemVersion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemObject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Defer Work Item",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/work-items/{item_id}/resume": {
+      "post": {
+        "description": "Resume a deferred item \u2014 working, with the deferred stamp cleared.\n\n**Parameters**\n\n- `body` \u2014 The version the caller last saw.\n\n**Returns:** The resumed `WorkItemObject`.\n\n**Raises**\n\n- `OmnigentError` \u2014 404 if the item is not in this session; 409 if the version is stale.",
+        "operationId": "resume_work_item_v1_sessions__session_id__work_items__item_id__resume_post",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The item to resume.",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkItemVersion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemObject"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Work Item",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/work-tree": {
+      "get": {
+        "description": "Return the session's full Work Tree.\n\nA session that has never had an item returns an empty tree \u2014 that is\nthe migrated state of every session predating this feature, not an\nerror.\n\n**Returns:** The full `WorkTree`.\n\n**Raises**\n\n- `OmnigentError` \u2014 404 if no session exists.",
+        "operationId": "get_work_tree_v1_sessions__session_id__work_tree_get",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkTree"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Tree",
         "tags": [
           "sessions"
         ]

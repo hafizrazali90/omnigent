@@ -37,10 +37,26 @@ from omnigent.entities.session_resources import (
     get_resource_by_id,
     resolve_terminal_entry_by_resource_id,
 )
+from omnigent.entities.work_item import (
+    DELIVERY_STATES,
+    DISCOVERY_CLASSES,
+    MAX_WORK_ITEM_DEPTH,
+    SESSION_LIFECYCLES,
+    SOURCE_KINDS,
+    WORK_STATUSES,
+    WorkItem,
+    WorkItemEvent,
+)
 
 __all__ = [
     "DEFAULT_ENVIRONMENT_ID",
+    "DELIVERY_STATES",
+    "DISCOVERY_CLASSES",
+    "MAX_WORK_ITEM_DEPTH",
     "NON_CONTENT_ITEM_TYPES",
+    "SESSION_LIFECYCLES",
+    "SOURCE_KINDS",
+    "WORK_STATUSES",
     "Account",
     "AccountToken",
     "Agent",
@@ -72,6 +88,8 @@ __all__ = [
     "SlashCommandData",
     "StoredFile",
     "TerminalCommandData",
+    "WorkItem",
+    "WorkItemEvent",
     "filter_resources_by_type",
     "get_resource_by_id",
     "parse_item_data",
