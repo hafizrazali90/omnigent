@@ -3206,25 +3206,43 @@ async def _prepare_claude_terminal_via_daemon(
                 "daemon claude session created",
                 startup_progress=startup_progress,
             )
-        elif persist_args:
-            # Resume with new flags: replace the stored args
-            # (last-write-wins). No new flags → leave the stored set so
-            # the runner reuses them.
+        else:
+            # The runner brings the terminal up from the session's own
+            # provider config, so a conv another wrapper owns would
+            # launch claude on that wrapper's model. Refuse before
+            # touching the daemon, runner, or launch args.
             _mark_startup_step(
                 startup_profiler,
-                "persisting resume launch args",
+                "fetching daemon resume session labels",
                 startup_progress=startup_progress,
-                progress_message="Updating Claude session...",
+                progress_message="Loading Claude session...",
             )
-            await client.patch(
-                f"/v1/sessions/{url_component(session_id)}",
-                json={"terminal_launch_args": persist_args},
-            )
+            labels = await _fetch_claude_session_labels(client, session_id)
+            _assert_claude_native_session(session_id, labels)
             _mark_startup_step(
                 startup_profiler,
-                "resume launch args persisted",
+                "daemon resume session labels checked",
                 startup_progress=startup_progress,
             )
+            if persist_args:
+                # Resume with new flags: replace the stored args
+                # (last-write-wins). No new flags → leave the stored set
+                # so the runner reuses them.
+                _mark_startup_step(
+                    startup_profiler,
+                    "persisting resume launch args",
+                    startup_progress=startup_progress,
+                    progress_message="Updating Claude session...",
+                )
+                await client.patch(
+                    f"/v1/sessions/{url_component(session_id)}",
+                    json={"terminal_launch_args": persist_args},
+                )
+                _mark_startup_step(
+                    startup_profiler,
+                    "resume launch args persisted",
+                    startup_progress=startup_progress,
+                )
         _mark_startup_step(
             startup_profiler,
             "waiting for host online",
@@ -3780,6 +3798,31 @@ async def _fetch_claude_session_labels(
     return {str(key): str(value) for key, value in labels.items()}
 
 
+def _assert_claude_native_session(session_id: str, labels: object) -> None:
+    """
+    Refuse to resume a conversation another wrapper owns.
+
+    Every resume path — local cold resume and the daemon-routed
+    ``--server`` launch — funnels through here so a codex-native (or
+    plain chat) conv can never be launched as claude: the runner would
+    apply that conv's own provider config and start claude on the wrong
+    model.
+
+    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param labels: ``labels`` from the session payload; any non-dict is
+        treated as "not claude-native".
+    :returns: None.
+    :raises click.ClickException: The conv is not claude-native.
+    """
+    wrapper = labels.get(_WRAPPER_LABEL_KEY) if isinstance(labels, dict) else None
+    if wrapper != _WRAPPER_LABEL_VALUE:
+        raise click.ClickException(
+            f"Conversation {session_id!r} is not a claude-native session "
+            f"(wrapper={wrapper!r}). Use `omnigent run --resume "
+            f"{session_id}` to resume it through the right runtime.",
+        )
+
+
 async def _resolve_cold_resume_args(
     client: httpx.AsyncClient,
     session_id: str,
@@ -3819,13 +3862,7 @@ async def _resolve_cold_resume_args(
             f"Conversation fetch returned non-JSON body: {exc}",
         ) from exc
     labels = payload.get("labels") if isinstance(payload, dict) else None
-    wrapper = labels.get(_WRAPPER_LABEL_KEY) if isinstance(labels, dict) else None
-    if wrapper != _WRAPPER_LABEL_VALUE:
-        raise click.ClickException(
-            f"Conversation {session_id!r} is not a claude-native session "
-            f"(wrapper={wrapper!r}). Use `omnigent run --resume "
-            f"{session_id}` to resume it through the right runtime.",
-        )
+    _assert_claude_native_session(session_id, labels)
     external_session_id = payload.get("external_session_id")
     if not isinstance(external_session_id, str) or not external_session_id:
         # Omnigent conv survives; claude side starts fresh. Warn on

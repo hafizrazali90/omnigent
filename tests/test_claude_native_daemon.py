@@ -190,6 +190,139 @@ async def test_create_claude_session_persists_terminal_launch_args() -> None:
     assert BRIDGE_ID_LABEL_KEY.encode() not in body
 
 
+async def test_prepare_via_daemon_rejects_non_claude_native_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    ``omnigent claude --server X --resume <codex conv>`` must refuse.
+
+    The server path resumes through the daemon, which persists args and
+    spawns a runner that brings the terminal up from the session's own
+    provider config — so a codex-native conv would launch claude against
+    the codex model and corrupt the conv. The wrapper-label guard has to
+    fire before any runner or terminal work, matching the local
+    cold-resume path and the codex wrapper's own check.
+    """
+    launch_attempts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        """Serve the codex-native session; record any launch traffic."""
+        path = request.url.path
+        if request.method == "GET" and path == "/v1/sessions/conv_codex":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "conv_codex",
+                    "agent_id": "ag_test",
+                    "status": "idle",
+                    "labels": {"omnigent.wrapper": "codex-native-ui"},
+                    "external_session_id": "codex-thread-1",
+                },
+            )
+        launch_attempts.append(f"{request.method} {path}")
+        return httpx.Response(200, json={})
+
+    real_client_cls = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+
+    def _mock_client_cls(**kwargs: Any) -> httpx.AsyncClient:
+        """Bind a real AsyncClient to the mock transport."""
+        return real_client_cls(transport=transport, **kwargs)
+
+    monkeypatch.setattr(claude_native.httpx, "AsyncClient", _mock_client_cls)
+
+    with pytest.raises(click.ClickException) as excinfo:
+        await claude_native._prepare_claude_terminal_via_daemon(
+            base_url="https://e.com",
+            headers={},
+            session_id="conv_codex",
+            session_bundle=None,
+            claude_args=(),
+            host_id="host_abc",
+            workspace="/tmp/ws",
+        )
+
+    assert "not a claude-native session" in excinfo.value.message
+    # Dead-end errors are the failure mode here: the message must name
+    # the command that can actually resume this conv.
+    assert "omnigent run --resume conv_codex" in excinfo.value.message
+    # Nothing may reach the daemon/runner/terminal before the guard.
+    assert launch_attempts == []
+
+
+async def test_prepare_via_daemon_resumes_claude_native_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A claude-native conv still resumes — guard passes, args persist.
+
+    Pairs with the rejection test above: the wrapper-label check must
+    not cost the ordinary server-resume path its arg persistence or its
+    terminal bring-up.
+    """
+    patches: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        """Serve the claude-native session and capture PATCH bodies."""
+        if request.method == "PATCH":
+            patches.append(json.loads(request.content))
+            return httpx.Response(200, json={})
+        return httpx.Response(
+            200,
+            json={
+                "id": "conv_claude",
+                "agent_id": "ag_test",
+                "status": "idle",
+                "labels": {"omnigent.wrapper": "claude-code-native-ui"},
+                "external_session_id": "claude-uuid-1",
+            },
+        )
+
+    real_client_cls = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+
+    def _mock_client_cls(**kwargs: Any) -> httpx.AsyncClient:
+        """Bind a real AsyncClient to the mock transport."""
+        return real_client_cls(transport=transport, **kwargs)
+
+    monkeypatch.setattr(claude_native.httpx, "AsyncClient", _mock_client_cls)
+    monkeypatch.setattr(claude_native, "wait_for_host_online", _noop_async)
+    monkeypatch.setattr(claude_native, "launch_or_reuse_daemon_runner", _noop_async)
+    monkeypatch.setattr(claude_native, "wait_for_runner_online", _noop_async)
+    monkeypatch.setattr(claude_native, "_ensure_claude_terminal_on_runner", _noop_async)
+    monkeypatch.setattr(claude_native, "_wait_for_claude_terminal_ready", _noop_async)
+    monkeypatch.setattr(
+        claude_native,
+        "_read_claude_terminal_tmux",
+        lambda *a, **k: _returns(SimpleNamespace(socket="sock", target="tgt")),
+    )
+
+    prepared = await claude_native._prepare_claude_terminal_via_daemon(
+        base_url="https://e.com",
+        headers={},
+        session_id="conv_claude",
+        session_bundle=None,
+        claude_args=("--model", "opus"),
+        host_id="host_abc",
+        workspace="/tmp/ws",
+    )
+
+    assert prepared.session_id == "conv_claude"
+    assert prepared.reattached is True
+    assert patches == [{"terminal_launch_args": ["--model", "opus"]}]
+
+
+async def _noop_async(*args: Any, **kwargs: Any) -> Any:
+    """Stand in for a daemon/runner seam that has nothing to assert."""
+    del args, kwargs
+    return None
+
+
+async def _returns(value: Any) -> Any:
+    """Await to *value* — lets a lambda seam return a canned object."""
+    return value
+
+
 def _install_daemon_seam_mocks(
     monkeypatch: pytest.MonkeyPatch,
     *,
