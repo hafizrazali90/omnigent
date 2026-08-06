@@ -27,8 +27,8 @@ vi.mock("./InlineTerminalsSection", () => ({
 vi.mock("./SubagentsPanel", () => ({
   SubagentsPanel: () => <div data-testid="subagents-stub" />,
 }));
-vi.mock("./TodoPanel", () => ({
-  TodoPanel: () => <div data-testid="todos-stub" />,
+vi.mock("./WorkTree", () => ({
+  WorkTree: () => <div data-testid="todos-stub" />,
 }));
 vi.mock("@/components/BrowserPane/BrowserPane", () => ({
   BrowserPane: ({ conversationId }: { conversationId: string }) => (

@@ -23,10 +23,15 @@ function TodoIcon({ status }: { status: TodoItem["status"] }) {
 }
 
 /**
- * Displays the active task list published by any harness.
+ * Displays the transient task list published by any harness.
  *
  * Reads from `useChatStore.todos`, populated by the session snapshot and
  * `session.todos` SSE updates. Renders nothing while the list is empty.
+ *
+ * @deprecated The right rail's task surface now shows the durable Work Tree
+ * (`WorkTree`), which provider todo events feed without owning. This panel has
+ * no remaining callers and is expected to be removed in 0.1.0; the
+ * `session.todos` event itself stays, as it is what feeds the tree.
  */
 export function TodoPanel({ frameless = false }: TodoPanelProps) {
   const todos = useChatStore((s) => s.todos);

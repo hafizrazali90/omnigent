@@ -96,6 +96,7 @@ from omnigent.stores.permission_store import PermissionStore
 from omnigent.stores.policy_store import PolicyStore
 from omnigent.stores.project_store import ProjectStore
 from omnigent.stores.scheduled_task_store import ScheduledTaskStore
+from omnigent.stores.work_tree_store import WorkTreeStore
 
 _logger = logging.getLogger(__name__)
 
@@ -785,6 +786,7 @@ def create_app(
     permission_store: PermissionStore | None = None,
     scheduled_task_store: ScheduledTaskStore | None = None,
     project_store: ProjectStore | None = None,
+    work_tree_store: WorkTreeStore | None = None,
     auth_provider: AuthProvider | None = None,
     host_store: HostStore | None = None,
     account_store: Any | None = None,  # SqlAlchemyAccountStore — accounts mode only
@@ -831,6 +833,9 @@ def create_app(
         starts an :class:`ScheduledTaskScheduler` that arms a timer per
         active task and fires the injected ``on_fire`` callback on
         schedule. ``None`` disables the scheduler entirely.
+    :param work_tree_store: Store for the durable, provider-neutral session
+        Work Tree. ``None`` omits the session ``/work-tree`` endpoints and the
+        stream's work-tree snapshot.
     :param project_store: Store for first-class projects (owner-private
         containers that group sessions). ``None`` disables the
         ``/v1/projects`` CRUD endpoints.
@@ -1965,6 +1970,9 @@ def create_app(
             # Validates target-project ownership when PATCH /v1/sessions/{id}
             # files a session into a project (owner-private membership).
             project_store=project_store,
+            # Backs the durable session Work Tree endpoints and the stream's
+            # snapshot-on-connect, so a reload recovers the current tree.
+            work_tree_store=work_tree_store,
             background_title_coordinator=background_title_coordinator,
         ),
         prefix="/v1",

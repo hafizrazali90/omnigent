@@ -723,6 +723,7 @@ from omnigent.stores.conversation_store import (
 from omnigent.stores.file_store import FileStore
 from omnigent.stores.permission_store import PermissionStore
 from omnigent.stores.project_store import ProjectStore
+from omnigent.stores.work_tree_store import WorkTreeStore
 from omnigent.telemetry import emit as _tel_emit
 from omnigent.telemetry.events import SessionDeletedEvent as _TelSessionDeletedEvent
 from omnigent.telemetry.events import SessionStoppedEvent as _TelSessionStoppedEvent
@@ -787,6 +788,7 @@ def create_sessions_router(
     runner_exit_reports: RunnerExitReports | None = None,
     host_registry: HostRegistry | None = None,
     project_store: ProjectStore | None = None,
+    work_tree_store: WorkTreeStore | None = None,
     background_title_coordinator: BackgroundSessionTitleCoordinator | None = None,
 ) -> APIRouter:
     """
@@ -852,6 +854,9 @@ def create_sessions_router(
         validate ownership when ``PATCH /v1/sessions/{id}`` files a
         session into a project. ``None`` disables the move-into-project
         action (a non-empty ``project_id`` is then rejected as unsupported).
+    :param work_tree_store: Store for the durable, provider-neutral session
+        Work Tree. ``None`` (e.g. in focused router tests) omits the
+        ``/work-tree`` and ``/work-items`` endpoints entirely.
     :param background_title_coordinator: Optional app-owned coordinator for
         semantic title generation after first-turn forwarding. ``None`` disables
         background titles in focused router tests.
@@ -869,6 +874,7 @@ def create_sessions_router(
     from omnigent.server.routes.sessions.routes_items import register_items_routes
     from omnigent.server.routes.sessions.routes_permissions import register_permissions_routes
     from omnigent.server.routes.sessions.routes_resources import register_resources_routes
+    from omnigent.server.routes.sessions.routes_work_tree import register_work_tree_routes
 
     register_core_routes(
         router,
@@ -950,6 +956,7 @@ def create_sessions_router(
         host_registry=host_registry,
         background_title_coordinator=background_title_coordinator,
         runner_tunnel_tokens=runner_tunnel_tokens,
+        work_tree_store=work_tree_store,
     )
 
     register_permissions_routes(
@@ -971,5 +978,14 @@ def create_sessions_router(
         permission_store=permission_store,
         agent_cache=agent_cache,
     )
+
+    if work_tree_store is not None:
+        register_work_tree_routes(
+            router,
+            conversation_store=conversation_store,
+            work_tree_store=work_tree_store,
+            auth_provider=auth_provider,
+            permission_store=permission_store,
+        )
 
     return router

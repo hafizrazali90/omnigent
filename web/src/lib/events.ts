@@ -10,6 +10,7 @@
 
 import type { RoutingDecisionExtras } from "./routingDecision";
 import type { ErrorInfo, ModelUsage, RememberScope, Response, SandboxLaunchStage } from "./types";
+import type { WorkTree } from "./workTreeApi";
 
 /** Provider-native tool item types. */
 export const NATIVE_TOOL_TYPES = new Set<string>([
@@ -565,6 +566,26 @@ export interface SessionAgentChangedEvent {
  * - `activeForm`: present-continuous form of the task (e.g. `"Running tests"`).
  *   Shown by the TodoPanel under in-progress items when distinct from `content`.
  */
+/**
+ * `session.work_tree` — the session's durable Work Tree changed.
+ *
+ * Full state on every event, and also delivered once as
+ * snapshot-on-connect, so a client that missed an event or reloaded
+ * replaces its tree wholesale rather than reconciling a diff.
+ *
+ * Distinct from {@link SessionTodosEvent}: that is a provider's transient
+ * checklist, this is the server-owned state that survives it.
+ */
+export interface SessionWorkTreeEvent {
+  type: "session_work_tree";
+  conversationId: string;
+  workTree: WorkTree;
+}
+
+/**
+ * `session.todos` — provider checklist update (see also
+ * {@link SessionWorkTreeEvent}, the durable server-owned tree).
+ */
 export interface SessionTodosEvent {
   type: "session_todos";
   conversationId: string;
@@ -896,6 +917,7 @@ export type StreamEvent =
   | SessionCollaborationModeEvent
   | SessionAgentChangedEvent
   | SessionTodosEvent
+  | SessionWorkTreeEvent
   | SessionTerminalPendingEvent
   | SessionSandboxStatusEvent
   | SessionMcpStartupEvent

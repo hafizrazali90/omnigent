@@ -338,3 +338,106 @@ def encode_scheduled_task_run_status(name: str) -> int:
 def decode_scheduled_task_run_status(code: int) -> str:
     """Decode a ``scheduled_task_runs.status`` int code to its name."""
     return _decode(SCHEDULED_TASK_RUN_STATUS, code, field="scheduled_task_runs.status")
+
+
+# ── Work Tree code tables ──────────────────────────────
+#
+# The durable session Work Tree keeps two closed sets deliberately apart:
+# ``status`` is how the work is going, ``delivery_state`` is how far the change
+# has actually travelled. Codes are append-only like every table above.
+
+WORK_ITEM_STATUS: dict[str, int] = {
+    "not_started": 1,
+    "working": 2,
+    "waiting": 3,
+    "paused": 4,
+    "blocked": 5,
+    "done": 6,
+}
+
+WORK_ITEM_DELIVERY_STATE: dict[str, int] = {
+    "local": 1,
+    "committed": 2,
+    "pushed": 3,
+    "pr_open": 4,
+    "merged": 5,
+    "deployed": 6,
+    "live_checked": 7,
+    "monitored": 8,
+    "accepted": 9,
+    "closed": 10,
+}
+
+WORK_ITEM_SOURCE_KIND: dict[str, int] = {
+    "user": 1,
+    "orchestrator": 2,
+    "worker": 3,
+    "provider_todo": 4,
+    "discovered": 5,
+    "resumed": 6,
+}
+
+WORK_ITEM_DISCOVERY_CLASS: dict[str, int] = {
+    "required": 1,
+    "related_later": 2,
+    "unrelated": 3,
+    "scope_change": 4,
+}
+
+SESSION_LIFECYCLE: dict[str, int] = {
+    "active": 1,
+    "paused": 2,
+    "deferred": 3,
+    "completed": 4,
+    "archived": 5,
+}
+
+
+def encode_work_item_status(name: str) -> int:
+    """Encode a ``work_items.status`` name to its int code."""
+    return _encode(WORK_ITEM_STATUS, name, field="work_items.status")
+
+
+def decode_work_item_status(code: int) -> str:
+    """Decode a ``work_items.status`` int code to its name."""
+    return _decode(WORK_ITEM_STATUS, code, field="work_items.status")
+
+
+def encode_work_item_delivery_state(name: str) -> int:
+    """Encode a ``work_items.delivery_state`` name to its int code."""
+    return _encode(WORK_ITEM_DELIVERY_STATE, name, field="work_items.delivery_state")
+
+
+def decode_work_item_delivery_state(code: int) -> str:
+    """Decode a ``work_items.delivery_state`` int code to its name."""
+    return _decode(WORK_ITEM_DELIVERY_STATE, code, field="work_items.delivery_state")
+
+
+def encode_work_item_source_kind(name: str) -> int:
+    """Encode a ``work_items.source_kind`` name to its int code."""
+    return _encode(WORK_ITEM_SOURCE_KIND, name, field="work_items.source_kind")
+
+
+def decode_work_item_source_kind(code: int) -> str:
+    """Decode a ``work_items.source_kind`` int code to its name."""
+    return _decode(WORK_ITEM_SOURCE_KIND, code, field="work_items.source_kind")
+
+
+def encode_work_item_discovery_class(name: str) -> int:
+    """Encode a ``work_items.discovery_class`` name to its int code."""
+    return _encode(WORK_ITEM_DISCOVERY_CLASS, name, field="work_items.discovery_class")
+
+
+def decode_work_item_discovery_class(code: int) -> str:
+    """Decode a ``work_items.discovery_class`` int code to its name."""
+    return _decode(WORK_ITEM_DISCOVERY_CLASS, code, field="work_items.discovery_class")
+
+
+def encode_session_lifecycle(name: str) -> int:
+    """Encode an ``omnigent_conversation_metadata.user_lifecycle`` name to its int code."""
+    return _encode(SESSION_LIFECYCLE, name, field="conversation_metadata.user_lifecycle")
+
+
+def decode_session_lifecycle(code: int) -> str:
+    """Decode an ``omnigent_conversation_metadata.user_lifecycle`` int code to its name."""
+    return _decode(SESSION_LIFECYCLE, code, field="conversation_metadata.user_lifecycle")

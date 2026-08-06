@@ -82,6 +82,7 @@ import { parseEvent, parseSseStream, type SseStreamResult } from "@/lib/sse";
 import { clearSseLog, pushSseEvent } from "@/lib/sseEventLog";
 import { childSessionsQueryKey, type ChildSessionInfo } from "@/hooks/useChildSessions";
 import { sessionItemsQueryKey } from "@/hooks/useSessionItems";
+import { workTreeQueryKey } from "@/hooks/useWorkTree";
 import type { Conversation, ConversationsPage } from "@/hooks/useConversations";
 import type { ConversationsInfiniteData } from "@/lib/sessionListCache";
 import { useTerminalActivityStore } from "./terminalActivity";
@@ -4216,6 +4217,11 @@ export function handleSessionEvent(event: StreamEvent): void {
           useChatStore.setState({ tokensUsed: ringTokens });
         }
       }
+      return;
+    case "session_work_tree":
+      // Full state on every event, so the cache is replaced rather than
+      // merged — a client that missed an event self-heals here.
+      queryClient?.setQueryData(workTreeQueryKey(event.conversationId), event.workTree);
       return;
     case "session_todos":
       // Replace the todo list entirely — each event carries the full

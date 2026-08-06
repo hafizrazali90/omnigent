@@ -656,9 +656,26 @@ class SqlConversationMetadata(OmnigentBase):
     # (Rule R032). NULL = unfiled. Coexists with the implicit ``omni_project``
     # label via the store's dual-read until labels are consolidated.
     project_id: Mapped[str | None] = mapped_column(Uuid16(), nullable=True)
+    # Explicit lifecycle the user chose (enum_codecs.SESSION_LIFECYCLE), kept
+    # apart from the computed operational state above: a live runner must never
+    # flip a session the user deliberately paused or archived. NULL = the user
+    # has never chosen, so callers fall back to "active".
+    user_lifecycle: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # Provider-neutral permission and tool-profile contract. "Requested" is what
+    # the session asked for, "effective" is what it actually got once policy had
+    # its say; a divergence is the signal a later slice surfaces. Profile *names*
+    # only — never a credential, token, or secret value.
+    requested_permission_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    effective_permission_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    requested_tool_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    effective_tool_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         CheckConstraint("kind IN (1, 2)", name="ck_conversation_metadata_kind"),
+        CheckConstraint(
+            "user_lifecycle IS NULL OR user_lifecycle IN (1, 2, 3, 4, 5)",
+            name="ck_conversation_metadata_user_lifecycle",
+        ),
         CheckConstraint(
             "host_id IS NULL OR workspace IS NOT NULL",
             name="ck_conversation_metadata_workspace_required_for_host",
@@ -1588,6 +1605,207 @@ class SqlScheduledTaskRun(OmnigentBase):
         Index(
             "ix_scheduled_task_runs_conversation_id",
             "workspace_id",
+            "conversation_id",
+        ),
+    )
+
+
+class SqlWorkItem(OmnigentBase):
+    """
+    SQLAlchemy model for the ``work_items`` table.
+
+    One node of a session's durable Work Tree — the provider-neutral record of
+    what the session is doing. Claude/Codex todo events update rows here through
+    the observation path, but the row itself is server-owned so a shorter or
+    reordered provider list can never erase user context.
+
+    Relates to ``conversations.id`` and (optionally) ``projects.id``; no DB
+    foreign keys (Rule R032). Parent/child linkage is the app-owned
+    ``parent_id`` — both rows always share ``conversation_id``, so the tree is
+    never split across sessions.
+    """
+
+    __tablename__ = "work_items"
+
+    # Tenant partition key: Databricks workspace id owning this row (0 = default). Part of the PK.
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        nullable=False,
+        server_default="0",
+        default=current_workspace_id,
+    )
+    id: Mapped[str] = mapped_column(Uuid16, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(Uuid16, nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(Uuid16, nullable=True)
+    # Denormalized 1-based depth so the max-depth rule is a cheap CHECK rather
+    # than a recursive walk on every insert.
+    depth: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Free-text context. Never SQL-queried, so stored compressed.
+    brief: Mapped[str | None] = mapped_column(CompressedText, nullable=True)
+    why: Mapped[str | None] = mapped_column(CompressedText, nullable=True)
+    next_action: Mapped[str | None] = mapped_column(CompressedText, nullable=True)
+    evidence: Mapped[str | None] = mapped_column(CompressedText, nullable=True)
+    # Enums stored as stable int codes (see omnigent.db.enum_codecs).
+    status: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    delivery_state: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    source_kind: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    discovery_class: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    # Set only when the item belongs to a project other than the session's home
+    # project; NULL means "same as the session".
+    project_id: Mapped[str | None] = mapped_column(Uuid16, nullable=True)
+    # Safe provider/orchestrator handle used to re-match an item across worker
+    # restarts and provider switches. Never a prompt, payload, or credential.
+    source_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    collapsed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+        default=False,
+    )
+    # Optimistic-concurrency counter. Every mutation checks the caller's value
+    # and bumps it, so two windows can never silently overwrite each other.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    created_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completed_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deferred_at: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN (1, 2, 3, 4, 5, 6)", name="ck_work_items_status"),
+        CheckConstraint(
+            "delivery_state IS NULL OR delivery_state IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)",
+            name="ck_work_items_delivery_state",
+        ),
+        CheckConstraint("source_kind IN (1, 2, 3, 4, 5, 6)", name="ck_work_items_source_kind"),
+        CheckConstraint(
+            "discovery_class IS NULL OR discovery_class IN (1, 2, 3, 4)",
+            name="ck_work_items_discovery_class",
+        ),
+        # Session/programme → task → subtask. Depth 4 must fail at the DB too,
+        # not only in the store, so a stray writer cannot create a fourth level.
+        CheckConstraint("depth IN (1, 2, 3)", name="ck_work_items_depth"),
+        CheckConstraint(
+            "(parent_id IS NULL AND depth = 1) OR (parent_id IS NOT NULL AND depth > 1)",
+            name="ck_work_items_root_depth",
+        ),
+        # "load this session's whole tree, in sibling order" — the only read
+        # shape the API has, served entirely from the index.
+        Index(
+            "ix_work_items_conversation_id",
+            "workspace_id",
+            "conversation_id",
+            "parent_id",
+            "sort_order",
+            "id",
+        ),
+        # Provider re-matching on reconnect: (session, source_ref) lookup.
+        Index(
+            "ix_work_items_source_ref",
+            "workspace_id",
+            "conversation_id",
+            "source_ref",
+        ),
+    )
+
+
+class SqlWorkItemEvent(OmnigentBase):
+    """
+    SQLAlchemy model for the ``work_item_events`` table.
+
+    Append-only, sanitized audit trail for the Work Tree: who changed what, to
+    which version, and when. Deliberately holds no raw prompt, tool payload, or
+    provider text — the ``summary`` is a short server-authored phrase naming the
+    fields touched or the resulting position, never a value the user typed.
+    Entries outlive the item they describe, so anything copied in here survives
+    the delete that was meant to remove it.
+
+    Relates to ``work_items.id``; no DB foreign key (Rule R032). Rows outlive
+    the item they describe so a delete stays auditable.
+    """
+
+    __tablename__ = "work_item_events"
+
+    # Tenant partition key: Databricks workspace id owning this row (0 = default). Part of the PK.
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        nullable=False,
+        server_default="0",
+        default=current_workspace_id,
+    )
+    id: Mapped[str] = mapped_column(Uuid16, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(Uuid16, nullable=False)
+    item_id: Mapped[str] = mapped_column(Uuid16, nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    # A user id, or a provider label like "provider:claude". Never a credential.
+    actor: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    summary: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Per-session monotonic counter. ``created_at`` is epoch *seconds*, so
+    # several edits in one second would otherwise read back in arbitrary order
+    # and the trail would not show what actually happened first.
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        # "audit trail for this session, oldest first" — the per-item view is
+        # the same scan with an item filter (the trail is human-scale).
+        Index(
+            "ix_work_item_events_conversation_id",
+            "workspace_id",
+            "conversation_id",
+            "seq",
+            "item_id",
+        ),
+        # ``seq`` is allocated from the session's current high-water mark, so
+        # two concurrent mutations can read the same one. This makes that a
+        # refused write the store retries, not an ambiguous trail.
+        Index(
+            "uq_work_item_events_conversation_seq",
+            "workspace_id",
+            "conversation_id",
+            "seq",
+            unique=True,
+        ),
+    )
+
+
+class SqlSessionRelatedProject(OmnigentBase):
+    """
+    SQLAlchemy model for the ``session_related_projects`` table.
+
+    Zero-or-more secondary projects a session touches, alongside the first-class
+    home project on ``omnigent_conversation_metadata.project_id``. Modelled as a
+    junction row rather than a duplicated session so one piece of work stays one
+    session no matter how many projects it reaches into.
+
+    Relates to ``conversations.id`` and ``projects.id``; no DB foreign keys
+    (Rule R032).
+    """
+
+    __tablename__ = "session_related_projects"
+
+    # Tenant partition key: Databricks workspace id owning this row (0 = default). Part of the PK.
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        nullable=False,
+        server_default="0",
+        default=current_workspace_id,
+    )
+    conversation_id: Mapped[str] = mapped_column(Uuid16, primary_key=True)
+    project_id: Mapped[str] = mapped_column(Uuid16, primary_key=True)
+    created_at: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        # Reverse lookup "which sessions relate to project X".
+        Index(
+            "ix_session_related_projects_project_id",
+            "workspace_id",
+            "project_id",
             "conversation_id",
         ),
     )

@@ -362,7 +362,7 @@ export class ApiError extends Error {
  * Falls back to ``"<status> <statusText>"`` when the body is missing or
  * not the AP error shape.
  */
-async function apiErrorFromResponse(res: Response): Promise<ApiError> {
+export async function apiErrorFromResponse(res: Response): Promise<ApiError> {
   let message = `${res.status} ${res.statusText}`;
   let code: string | null = null;
   try {
