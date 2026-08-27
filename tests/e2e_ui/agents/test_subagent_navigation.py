@@ -90,7 +90,7 @@ def test_two_joke_subagents_appear_and_navigate(
     # hidden mobile drawer that mirrors the same testids.
     open_right_rail(page)
     rail = page.get_by_role("complementary", name="Workspace")
-    agents_tab = rail.get_by_role("tab", name=re.compile("^Agents"))
+    agents_tab = rail.get_by_role("tab", name=re.compile("^Session tree"))
     agents_tab.click()
     rows = rail.locator(_SUBAGENT_ROW)
     expect(rows).to_have_count(2, timeout=30_000)

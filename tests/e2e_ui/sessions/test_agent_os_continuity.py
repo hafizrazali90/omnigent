@@ -76,7 +76,7 @@ def test_focused_task_reads_only_its_linked_session_map(
         expand_workspace.click()
     workspace = page.get_by_label("Workspace")
     expect(workspace).to_be_visible(timeout=30_000)
-    workspace.get_by_role("tab", name=re.compile(r"Agents \d")).click()
+    workspace.get_by_role("tab", name=re.compile(r"Session tree \d")).click()
 
     task_brief = page.get_by_test_id("agent-os-task-brief")
     expect(task_brief).to_be_visible()

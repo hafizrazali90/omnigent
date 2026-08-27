@@ -2,8 +2,14 @@ import { useCallback, useMemo, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { isVersionConflict, WORK_STATUSES } from "@/lib/workTreeApi";
+import {
+  isVersionConflict,
+  summarizeWorkItems,
+  WORK_STATUSES,
+  WORK_STATUS_LABEL,
+} from "@/lib/workTreeApi";
 import type { WorkDeliveryState, WorkItem, WorkStatus } from "@/lib/workTreeApi";
 import { useWorkTree } from "@/hooks/useWorkTree";
 import type { WorkTreeNode } from "@/hooks/useWorkTree";
@@ -19,15 +25,6 @@ const STATUS_GLYPH: Record<WorkStatus, string> = {
   paused: "Ⅱ",
   blocked: "!",
   done: "✓",
-};
-
-const STATUS_LABEL: Record<WorkStatus, string> = {
-  not_started: "Not started",
-  working: "Working",
-  waiting: "Waiting",
-  paused: "Paused",
-  blocked: "Blocked",
-  done: "Done",
 };
 
 const STATUS_TONE: Record<WorkStatus, string> = {
@@ -240,19 +237,20 @@ function WorkItemRow({
           {expanded && hasDetail && <WorkItemDetails item={item} homeProjectId={homeProjectId} />}
         </div>
 
+        <select
+          aria-label={`Status of ${item.title}`}
+          value={item.status}
+          onChange={(e) => onStatusChange(item, e.target.value as WorkStatus)}
+          className="h-5 max-w-24 shrink-0 rounded border border-border bg-card px-1 text-[10px]"
+        >
+          {WORK_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {WORK_STATUS_LABEL[status]}
+            </option>
+          ))}
+        </select>
+
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 focus-within:opacity-100 group-hover:opacity-100">
-          <select
-            aria-label={`Status of ${item.title}`}
-            value={item.status}
-            onChange={(e) => onStatusChange(item, e.target.value as WorkStatus)}
-            className="h-5 rounded border border-border bg-transparent text-[10px]"
-          >
-            {WORK_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABEL[status]}
-              </option>
-            ))}
-          </select>
           {item.deferredAt === null ? (
             <button
               type="button"
@@ -427,7 +425,7 @@ export function WorkTree({
     );
   }, [addingUnder, create, draftTitle, handleError]);
 
-  const doneCount = useMemo(() => items.filter((item) => item.status === "done").length, [items]);
+  const progress = useMemo(() => summarizeWorkItems(items), [items]);
 
   if (!sessionId) return null;
 
@@ -439,15 +437,19 @@ export function WorkTree({
         !frameless && "border-t border-b border-border",
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-2 pt-2 pb-1">
-        <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          Work tree
-        </p>
-        {items.length > 0 && (
+      <div className="space-y-1.5 px-2 pt-2 pb-1.5" data-testid="implementation-progress">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Implementation tree
+          </p>
           <span className="text-[10px] tabular-nums text-muted-foreground">
-            {doneCount}/{items.length} done
+            {progress.completed}/{progress.total} · {WORK_STATUS_LABEL[progress.status]}
           </span>
-        )}
+        </div>
+        <Progress
+          value={progress.percent}
+          aria-label={`Implementation progress ${progress.completed} of ${progress.total}, ${WORK_STATUS_LABEL[progress.status]}`}
+        />
       </div>
 
       {conflict && (
@@ -497,7 +499,7 @@ export function WorkTree({
 
       {!isLoading && !isError && items.length === 0 && (
         <p data-testid="work-tree-empty" className="px-2 py-3 text-[11px] text-muted-foreground">
-          Nothing tracked yet. Add the first piece of work, or let the agent’s plan fill it in.
+          No implementation steps yet. Add the first step or ask the agent to create a plan.
         </p>
       )}
 

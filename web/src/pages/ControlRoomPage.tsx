@@ -2,13 +2,10 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowUpRightIcon,
-  BotIcon,
-  CircleAlertIcon,
   Columns2Icon,
+  EllipsisIcon,
   LayoutGridIcon,
   Loader2Icon,
-  MessageSquareMoreIcon,
-  RadioIcon,
   SendIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -21,6 +18,12 @@ import {
 } from "@/components/PagePresentation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -32,19 +35,19 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useConversations, type Conversation } from "@/hooks/useConversations";
 import { useControlRoomLane } from "@/hooks/useControlRoomLane";
-import { agentOsUnderstandingFromLabels } from "@/lib/agentOsUnderstanding";
-import { relativeTime } from "@/lib/relativeTime";
+import { useSession } from "@/hooks/useSession";
+import { useWorkTree } from "@/hooks/useWorkTree";
+import { CLAUDE_NATIVE_MODELS } from "@/lib/claudeNativeModels";
+import { findNativeModelOption } from "@/lib/codexNativeModels";
+import { parseEvent } from "@/lib/sse";
+import type { Session } from "@/lib/types";
+import type { WorkItem } from "@/lib/workTreeApi";
 import { Link } from "@/lib/routing";
 import { cn } from "@/lib/utils";
 
 function workspaceName(workspace: string | null | undefined): string {
   if (!workspace) return "No workspace";
   return workspace.split("/").filter(Boolean).at(-1) ?? workspace;
-}
-
-function activityLabel(updatedAtSeconds: number): string {
-  const relative = relativeTime(updatedAtSeconds * 1000);
-  return relative === "now" ? "now" : `${relative} ago`;
 }
 
 function taskState(session: Conversation): {
@@ -82,6 +85,97 @@ function taskState(session: Conversation): {
 
 type ControlRoomDensity = "comfortable" | "compact";
 
+interface CurrentTaskSummary {
+  label: string;
+  text: string;
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function formatControlRoomModel(session: Session | null): string | null {
+  if (!session) return null;
+  const usageModels = Object.keys(session.usageByModel ?? {});
+  const model =
+    session.modelOverride ?? session.llmModel ?? (usageModels.length === 1 ? usageModels[0] : null);
+  const raw = model?.trim();
+  if (!raw) return null;
+
+  const advertised = findNativeModelOption(session.codexModelOptions ?? [], raw);
+  if (advertised) return advertised.displayName ?? advertised.id;
+
+  const leaf =
+    raw
+      .split("/")
+      .at(-1)
+      ?.replace(/^system\.ai\./, "") ?? raw;
+  const alias = CLAUDE_NATIVE_MODELS.find((option) => option.id === leaf.toLowerCase());
+  if (alias) return `Claude ${alias.label}`;
+
+  const claude = leaf.match(/^claude-(opus|sonnet|haiku|fable)-(.+)$/i);
+  if (claude) {
+    return `Claude ${titleCase(claude[1])} ${claude[2].replace(/-(?=\d)/g, ".")}`;
+  }
+
+  const gpt = leaf.replace(/^databricks-/, "").match(/^gpt-(\d+)[.-](\d+)(?:-(.+))?$/i);
+  if (gpt) return `GPT-${gpt[1]}.${gpt[2]}${gpt[3] ? ` ${titleCase(gpt[3])}` : ""}`;
+
+  const gptFamily = leaf.replace(/^databricks-/, "").match(/^gpt-([a-z0-9.]+)(?:-(.+))?$/i);
+  if (gptFamily) {
+    return `GPT-${gptFamily[1]}${gptFamily[2] ? ` ${titleCase(gptFamily[2])}` : ""}`;
+  }
+
+  return titleCase(leaf);
+}
+
+function pendingQuestion(session: Session | null): string | null {
+  for (const raw of session?.pendingElicitations ?? []) {
+    const event = parseEvent("response.elicitation_request", raw);
+    if (event?.type === "elicitation_request" && event.message.trim()) return event.message.trim();
+  }
+  return null;
+}
+
+export function currentTaskSummary(
+  conversation: Conversation,
+  session: Session | null,
+  items: WorkItem[],
+): CurrentTaskSummary | null {
+  const question = pendingQuestion(session);
+  if (question) return { label: "Waiting for you", text: question };
+
+  const item =
+    items.find((candidate) => candidate.status === "working") ??
+    items.find((candidate) => candidate.status === "waiting") ??
+    items.find((candidate) => candidate.status === "blocked") ??
+    items.find((candidate) => candidate.status === "not_started") ??
+    items.find((candidate) => candidate.status === "paused");
+  if (!item) return null;
+
+  if (conversation.status === "failed") {
+    return { label: "Needs review", text: item.nextAction?.trim() || item.title };
+  }
+  if (item.status === "working") {
+    return {
+      label: conversation.status === "running" ? "Working on" : "Pending",
+      text: item.title,
+    };
+  }
+  if (item.status === "waiting") {
+    return { label: "Waiting", text: item.nextAction?.trim() || item.title };
+  }
+  if (item.status === "blocked") {
+    return { label: "Blocked", text: item.nextAction?.trim() || item.title };
+  }
+  if (item.status === "paused") return { label: "Paused", text: item.title };
+  return { label: "Next", text: item.nextAction?.trim() || item.title };
+}
+
 function TaskLane({
   session,
   density,
@@ -99,8 +193,11 @@ function TaskLane({
 }) {
   const state = taskState(session);
   const title = session.title?.trim() || "Untitled session";
-  const understanding = agentOsUnderstandingFromLabels(session.labels);
   const lane = useControlRoomLane(session.id);
+  const snapshot = useSession(session.id).session;
+  const workTree = useWorkTree(session.id);
+  const model = formatControlRoomModel(snapshot);
+  const taskSummary = currentTaskSummary(session, snapshot, workTree.items);
   const [draft, setDraft] = useState("");
   const canReply = session.permission_level == null || session.permission_level >= 2;
 
@@ -119,113 +216,99 @@ function TaskLane({
     <article
       data-testid="control-room-lane"
       className={cn(
-        "flex min-w-0 flex-col rounded-xl border border-border bg-card",
-        density === "compact" ? "min-h-[30rem]" : "min-h-[36rem]",
+        "flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card",
+        density === "compact" ? "h-[30rem]" : "h-[38rem]",
       )}
     >
       <div
+        data-testid="control-room-lane-header"
         className={cn(
-          "flex items-start justify-between gap-3 border-b border-border",
-          density === "compact" ? "px-3 py-3" : "px-4 py-4",
+          "border-b border-border",
+          density === "compact" ? "px-3 py-2.5" : "px-4 py-4",
         )}
       >
-        <div className="min-w-0">
-          <p className="mb-1 truncate text-xs font-medium text-muted-foreground">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <p className="truncate text-xs font-medium text-muted-foreground">
             {workspaceName(session.workspace)}
           </p>
-          <h2 className="line-clamp-2 text-base font-semibold leading-snug text-foreground">
-            {title}
-          </h2>
-          <div className="mt-2 flex items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Move ${title} left`}
-              disabled={!canMoveLeft}
-              onClick={onMoveLeft}
-            >
-              <ArrowLeftIcon className="size-3.5" />
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button asChild variant="ghost" size="icon-xs">
+              <Link
+                to={`/c/${encodeURIComponent(session.id)}`}
+                aria-label={`Open task: ${title}`}
+                title="Open task"
+              >
+                <ArrowUpRightIcon className="size-3.5" />
+              </Link>
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Move ${title} right`}
-              disabled={!canMoveRight}
-              onClick={onMoveRight}
-            >
-              <ArrowRightIcon className="size-3.5" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="icon-xs" aria-label="More task actions">
+                  <EllipsisIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={!canMoveLeft} onSelect={onMoveLeft}>
+                  <ArrowLeftIcon className="size-4" />
+                  Move task left
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canMoveRight} onSelect={onMoveRight}>
+                  <ArrowRightIcon className="size-4" />
+                  Move task right
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to={`/split-focus?session=${encodeURIComponent(session.id)}`}>
+                    <Columns2Icon className="size-4" />
+                    Open in Split Focus
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-        <Badge variant="outline" className={cn("shrink-0 gap-1.5", state.tone)}>
-          <span className={cn("size-1.5 rounded-full", state.dot)} />
-          {state.label}
-        </Badge>
+        <h2 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+          {title}
+        </h2>
+        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2">
+          {model ? (
+            <p className="truncate text-xs font-medium text-muted-foreground" title={model}>
+              {model}
+            </p>
+          ) : (
+            <span />
+          )}
+          <Badge variant="outline" className={cn("shrink-0 gap-1.5", state.tone)}>
+            <span className={cn("size-1.5 rounded-full", state.dot)} />
+            {state.label}
+          </Badge>
+        </div>
       </div>
 
       <div
         className={cn(
-          "flex flex-1 flex-col",
-          density === "compact" ? "gap-3 px-3 py-3" : "gap-4 px-4 py-4",
+          "flex min-h-0 flex-1 flex-col",
+          density === "compact" ? "gap-2.5 px-3 py-2.5" : "gap-4 px-4 py-4",
         )}
       >
-        {understanding && (
-          <dl
-            className={cn(
-              "grid rounded-lg border border-border bg-background/55 text-sm",
-              density === "compact" ? "gap-2 p-2.5" : "gap-3 p-3",
-            )}
+        {taskSummary && (
+          <div
+            data-testid="control-room-task-state"
+            className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 border-l-2 border-primary/35 px-2.5 py-1 text-xs"
           >
-            <div>
-              <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                Finish line
-              </dt>
-              <dd className="mt-1 font-medium text-foreground/85">
-                {understanding.finishLine || "Not set"}
-              </dd>
-            </div>
-            {understanding.provenState && (
-              <div className="border-t border-border/70 pt-3">
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                  Current proof
-                </dt>
-                <dd className="mt-1 font-medium text-foreground/85">{understanding.provenState}</dd>
-                {understanding.provenStateEvidence && (
-                  <dd className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {understanding.provenStateEvidence}
-                  </dd>
-                )}
-              </div>
-            )}
-          </dl>
-        )}
-
-        <div className={cn("rounded-lg bg-muted/45", density === "compact" ? "p-2.5" : "p-3")}>
-          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <MessageSquareMoreIcon className="size-3.5" />
-            Current session
+            <span className="font-semibold text-muted-foreground">{taskSummary.label}</span>
+            <span className="line-clamp-2 font-medium text-foreground/85" title={taskSummary.text}>
+              {taskSummary.text}
+            </span>
           </div>
-          <p className="text-sm leading-relaxed text-foreground/85">
-            {session.status === "running"
-              ? "The worker is currently progressing this task."
-              : (session.pending_elicitations_count ?? 0) > 0
-                ? "The worker is waiting for your answer or approval."
-                : session.status === "failed"
-                  ? "The latest run stopped and needs your review."
-                  : "The latest turn is complete and ready to continue."}
-          </p>
-        </div>
+        )}
 
         <div
           className={cn(
-            "flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background/65",
-            density === "compact" ? "min-h-32" : "min-h-44",
+            "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background/65",
           )}
         >
           <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
-            Recent conversation
+            Conversation
           </div>
           <div
             data-testid="control-room-lane-transcript"
@@ -248,7 +331,8 @@ function TaskLane({
                   key={message.id}
                   data-role={message.role}
                   className={cn(
-                    "max-w-[88%] rounded-lg px-3 py-2 text-sm leading-relaxed",
+                    "max-w-[92%] rounded-lg px-2.5 py-2 leading-relaxed",
+                    density === "compact" ? "text-xs" : "text-sm",
                     message.role === "user"
                       ? "ml-auto bg-primary text-primary-foreground"
                       : "bg-muted text-foreground",
@@ -264,34 +348,8 @@ function TaskLane({
           </div>
         </div>
 
-        <dl className={cn("grid text-sm", density === "compact" ? "gap-2" : "gap-3")}>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="flex items-center gap-2 text-muted-foreground">
-              <BotIcon className="size-3.5" /> Worker
-            </dt>
-            <dd className="truncate font-medium">{session.agent_name || "Agent"}</dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="flex items-center gap-2 text-muted-foreground">
-              <RadioIcon className="size-3.5" /> Activity
-            </dt>
-            <dd className="font-medium">{activityLabel(session.updated_at)}</dd>
-          </div>
-          {(session.pending_elicitations_count ?? 0) > 0 && (
-            <div className="flex items-center justify-between gap-3">
-              <dt className="flex items-center gap-2 text-warning">
-                <CircleAlertIcon className="size-3.5" /> Waiting
-              </dt>
-              <dd className="font-medium text-warning">
-                {session.pending_elicitations_count} request
-                {session.pending_elicitations_count === 1 ? "" : "s"}
-              </dd>
-            </div>
-          )}
-        </dl>
-
         <form
-          className="mt-auto space-y-2 pt-2"
+          className="mt-auto flex items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             submitReply();
@@ -303,17 +361,14 @@ function TaskLane({
             onChange={(event) => setDraft(event.target.value)}
             placeholder={canReply ? "Reply to this task…" : "You have read-only access"}
             disabled={!canReply || lane.isSending}
-            rows={2}
-            className="min-h-16 resize-none"
+            rows={1}
+            className="max-h-20 min-h-10 resize-none py-2"
           />
-          {lane.sendError && (
-            <p role="alert" className="text-xs text-destructive">
-              Couldn’t send this reply. Your draft is still here.
-            </p>
-          )}
           <Button
             type="submit"
-            className="w-full"
+            size="icon"
+            className="size-10 md:size-10"
+            aria-label="Send reply"
             disabled={!canReply || lane.isSending || !draft.trim()}
           >
             {lane.isSending ? (
@@ -321,24 +376,13 @@ function TaskLane({
             ) : (
               <SendIcon className="size-4" />
             )}
-            Send reply
           </Button>
         </form>
-
-        <div className="flex flex-wrap gap-2">
-          <Button asChild className="min-w-40 flex-1 justify-between" variant="outline">
-            <Link to={`/c/${encodeURIComponent(session.id)}`}>
-              Open task
-              <ArrowUpRightIcon className="size-4" />
-            </Link>
-          </Button>
-          <Button asChild className="min-w-40 flex-1 justify-between" variant="outline">
-            <Link to={`/split-focus?session=${encodeURIComponent(session.id)}`}>
-              Open in Split Focus
-              <Columns2Icon className="size-4" />
-            </Link>
-          </Button>
-        </div>
+        {lane.sendError && (
+          <p role="alert" className="text-xs text-destructive">
+            Couldn’t send this reply. Your draft is still here.
+          </p>
+        )}
       </div>
     </article>
   );
@@ -353,10 +397,10 @@ export function ControlRoomPage() {
     return stored === 2 || stored === 3 || stored === 4 ? stored : 4;
   });
   const [density, setDensity] = useState<ControlRoomDensity>(() => {
-    if (typeof window === "undefined") return "comfortable";
-    return window.localStorage.getItem("agent-os.control-room.density") === "compact"
-      ? "compact"
-      : "comfortable";
+    if (typeof window === "undefined") return "compact";
+    return window.localStorage.getItem("agent-os.control-room.density.v2") === "comfortable"
+      ? "comfortable"
+      : "compact";
   });
   const [manualOrder, setManualOrder] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -395,18 +439,12 @@ export function ControlRoomPage() {
     (session) => (session.pending_elicitations_count ?? 0) > 0 || session.status === "failed",
   ).length;
   const working = sessions.filter((session) => session.status === "running").length;
-  const columnClass = {
-    2: "grid-cols-1 xl:grid-cols-2",
-    3: "grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3",
-    4: "grid-cols-1 xl:grid-cols-2 2xl:grid-cols-4",
-  }[columns];
-
   useEffect(() => {
     window.localStorage.setItem("agent-os.control-room.columns", String(columns));
   }, [columns]);
 
   useEffect(() => {
-    window.localStorage.setItem("agent-os.control-room.density", density);
+    window.localStorage.setItem("agent-os.control-room.density.v2", density);
   }, [density]);
 
   useEffect(() => {
@@ -529,7 +567,10 @@ export function ControlRoomPage() {
           data-testid="control-room-lanes"
           data-columns={columns}
           data-density={density}
-          className={cn("grid gap-4 pb-4", columnClass)}
+          className={cn("grid overflow-x-auto pb-4", density === "compact" ? "gap-3" : "gap-4")}
+          style={{
+            gridTemplateColumns: `repeat(${columns}, minmax(${density === "compact" ? "17rem" : "22rem"}, 1fr))`,
+          }}
         >
           {visibleSessions.map((session) => {
             const orderedIndex = orderedSessions.findIndex((row) => row.id === session.id);

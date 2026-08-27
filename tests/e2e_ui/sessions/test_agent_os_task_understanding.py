@@ -43,7 +43,7 @@ def test_focused_task_shows_and_corrects_its_agent_os_understanding(
         expand_workspace.click()
     workspace = page.get_by_label("Workspace")
     expect(workspace).to_be_visible(timeout=30_000)
-    workspace.get_by_role("tab", name=re.compile(r"Agents \d")).click()
+    workspace.get_by_role("tab", name=re.compile(r"Session tree \d")).click()
 
     understanding = page.get_by_test_id("agent-os-task-understanding")
     expect(understanding).to_be_visible()

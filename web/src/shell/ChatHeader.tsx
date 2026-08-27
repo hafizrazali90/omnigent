@@ -434,7 +434,7 @@ export function ChatHeader({
                     )}
                   </DropdownMenuItem>
                 )}
-                {/* Agents — always present (the panel lists at least
+                {/* Session tree — always present (the panel lists at least
                     the main agent); the badge counts the whole tree,
                     main agent included. */}
                 <DropdownMenuItem
@@ -442,7 +442,7 @@ export function ChatHeader({
                   className="gap-2.5 px-2.5 py-2 text-ui"
                 >
                   <BotIcon className="size-4" />
-                  Agents
+                  Session tree
                   <span
                     className={cn(
                       TAB_BADGE_BASE,
@@ -477,13 +477,13 @@ export function ChatHeader({
                     )}
                   </DropdownMenuItem>
                 )}
-                {mobileMenu.todosSupported && mobileMenu.todosTotal > 0 && (
+                {mobileMenu.todosSupported && (
                   <DropdownMenuItem
                     onSelect={mobileMenu.onOpenTodos}
                     className="gap-2.5 px-2.5 py-2 text-ui"
                   >
                     <ListTodoIcon className="size-4" />
-                    Tasks
+                    Implementation
                     <span className={cn(TAB_BADGE_BASE, "ml-auto bg-muted text-muted-foreground")}>
                       {mobileMenu.todosCompleted}/{mobileMenu.todosTotal}
                     </span>

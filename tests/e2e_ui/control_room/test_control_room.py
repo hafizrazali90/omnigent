@@ -57,10 +57,40 @@ def test_control_room_replies_stay_in_their_sessions_and_open_original_workspace
     expect(page.get_by_role("heading", name="Control Room")).to_be_visible(timeout=30_000)
     lanes = page.get_by_test_id("control-room-lane")
     expect(lanes).to_have_count(2, timeout=30_000)
+    lane_grid = page.get_by_test_id("control-room-lanes")
+    expect(lane_grid).to_have_attribute("data-density", "compact")
+    assert (
+        page.evaluate(
+            """() => getComputedStyle(
+            document.querySelector('[data-testid="control-room-lanes"]')
+        ).gridTemplateColumns.split(' ').length"""
+        )
+        == 4
+    )
     payment_lane = lanes.filter(has_text="Review payment safeguards")
     expect(payment_lane).to_be_visible()
     crm_lane = lanes.filter(has_text="Prepare CRM release")
     expect(crm_lane).to_be_visible()
+    assert payment_lane.bounding_box()["height"] <= 500
+    expect(payment_lane.get_by_text("Now", exact=True)).to_have_count(0)
+    expect(payment_lane.get_by_text("Goal", exact=True)).to_have_count(0)
+    expect(payment_lane.get_by_text("Proof", exact=True)).to_have_count(0)
+    expect(payment_lane.get_by_text("Current session", exact=True)).to_have_count(0)
+    expect(
+        payment_lane.get_by_role("link", name="Open task: Review payment safeguards")
+    ).to_be_visible()
+    expect(payment_lane.get_by_text("Open task", exact=True)).to_have_count(0)
+    expect(
+        payment_lane.get_by_role("textbox", name="Reply to Review payment safeguards")
+    ).to_have_attribute("rows", "1")
+    reply_box = payment_lane.get_by_role(
+        "textbox", name="Reply to Review payment safeguards"
+    ).bounding_box()
+    send_button = payment_lane.get_by_role("button", name="Send reply").bounding_box()
+    assert reply_box is not None
+    assert send_button is not None
+    assert abs(reply_box["y"] - send_button["y"]) <= 1
+    assert abs(reply_box["height"] - send_button["height"]) <= 1
 
     payment_reply = "Continue only the payment review"
     crm_reply = "Continue only the CRM release"
@@ -94,13 +124,19 @@ def test_control_room_replies_stay_in_their_sessions_and_open_original_workspace
         expand_workspace.click()
     workspace = page.get_by_label("Workspace")
     expect(workspace).to_be_visible(timeout=30_000)
-    workspace.get_by_role("tab", name=re.compile(r"Agents \d")).click()
+    workspace.get_by_role("tab", name=re.compile(r"Session tree \d")).click()
 
     worker_summary = page.get_by_test_id("worker-sidebar-summary")
     expect(worker_summary).to_be_visible()
     expect(worker_summary.get_by_text("Prepare CRM release", exact=True)).to_be_visible()
     expect(worker_summary.get_by_text("1 worker", exact=True)).to_be_visible()
-    expect(worker_summary.get_by_text("No task checklist", exact=True)).to_be_visible()
+    expect(worker_summary.get_by_text("0/0 · Not started", exact=True)).to_be_visible()
+    expect(
+        worker_summary.get_by_role(
+            "progressbar",
+            name="Session implementation progress 0 of 0, Not started",
+        )
+    ).to_be_visible()
     expect(
         worker_summary.get_by_text(
             "Commit, push, and deploy still require your approval.", exact=True

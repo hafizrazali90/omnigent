@@ -157,7 +157,7 @@ def test_mobile_fab_lists_file_surfaces_and_omits_absent_ones(
     agents, and is not claude-native — so the menu must list Files (the
     single files surface; its Changed/All scope is an in-panel toggle)
     and Agents (unconditional — the panel lists at least the main
-    agent, badge "1"), and must NOT list Shells or Tasks. The session's
+    agent, badge "1"), plus Implementation, and must NOT list Shells. The session's
     only terminal is the auto-created embedded Omnigent REPL, which is
     plumbing for the Chat/Terminal pill, not inventory — listing it
     read as a phantom "main" terminal on agents that don't run a TUI,
@@ -172,14 +172,14 @@ def test_mobile_fab_lists_file_surfaces_and_omits_absent_ones(
     expect(page.get_by_role("menuitem", name="Files", exact=True)).to_be_visible()
     # Agents is always present; "1" = just the main agent. "0" means
     # the main agent was dropped from the count.
-    expect(page.get_by_role("menuitem", name=re.compile(r"Agents\s*1"))).to_be_visible()
+    expect(page.get_by_role("menuitem", name=re.compile(r"Session tree\s*1"))).to_be_visible()
     # No Shells entry: the embedded REPL terminal is excluded from
     # the inventory (reachable via the Chat/Terminal pill instead). An
     # entry here means the REPL leaked back into the FAB gating.
     expect(page.get_by_role("menuitem", name="Shells")).to_have_count(0)
     # No separate Changes entry (merged into Files) and no todos.
     expect(page.get_by_role("menuitem", name="Changes")).to_have_count(0)
-    expect(page.get_by_role("menuitem", name="Tasks")).to_have_count(0)
+    expect(page.get_by_role("menuitem", name=re.compile(r"^Implementation"))).to_be_visible()
 
 
 def test_mobile_shells_drawer_exposes_new_shell_before_shells_exist(
@@ -227,7 +227,7 @@ def test_mobile_fab_shows_agents_entry_when_child_agents_exist(
 
     page.get_by_role("button", name="Open session menu").click()
 
-    agents_entry = page.get_by_role("menuitem", name="Agents")
+    agents_entry = page.get_by_role("menuitem", name="Session tree")
     # 10s budget: the rail fetches child_sessions on load, so the entry
     # can take a fetch cycle (plus cold-start latency) to appear.
     expect(agents_entry).to_be_visible(timeout=10_000)

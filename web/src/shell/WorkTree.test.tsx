@@ -120,6 +120,33 @@ describe("WorkTree statuses", () => {
       expect(screen.getByTestId(`work-item-status-${status}`)).toBeInTheDocument();
     }
   });
+
+  it("shows aggregate progress and keeps each row status readable", async () => {
+    renderTree([
+      item({ title: "Finished", status: "done" }),
+      item({ title: "Blocked step", status: "blocked" }),
+    ]);
+
+    expect(
+      await screen.findByRole("progressbar", {
+        name: "Implementation progress 1 of 2, Blocked",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("implementation-progress")).toHaveTextContent("1/2 · Blocked");
+    expect(screen.getByLabelText("Status of Blocked step")).toHaveValue("blocked");
+    expect(screen.getByLabelText("Status of Blocked step")).not.toHaveClass("opacity-0");
+  });
+
+  it("keeps the empty implementation tree reachable and actionable", async () => {
+    renderTree([]);
+
+    expect(await screen.findByText("Implementation tree")).toBeInTheDocument();
+    expect(screen.getByText("0/0 · Not started")).toBeInTheDocument();
+    expect(await screen.findByTestId("work-tree-empty")).toHaveTextContent(
+      "No implementation steps yet",
+    );
+    expect(screen.getByRole("textbox", { name: "Add work item" })).toBeInTheDocument();
+  });
 });
 
 describe("WorkTree delivery state", () => {

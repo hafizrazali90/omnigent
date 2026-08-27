@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { WORK_STATUS_LABEL, type WorkStatus } from "@/lib/workTreeApi";
 import { isOwnerLevel } from "@/lib/permissionsApi";
 import {
   DropdownMenu,
@@ -543,6 +544,8 @@ interface WorkspacePanelProps {
   todosCompleted: number;
   /** Total todo count (Tasks tab badge denominator + visibility gate). */
   todosTotal: number;
+  /** Aggregate implementation status shown in both tree views. */
+  todosStatus: WorkStatus;
   /**
    * The "root" session id for the Agents tab — the active session's
    * parent when inside a child, else the active id. May be null while
@@ -628,6 +631,7 @@ export function WorkspacePanel({
   todosSupported,
   todosCompleted,
   todosTotal,
+  todosStatus,
   rootSessionId,
   selectedFilePath,
   openFiles,
@@ -742,18 +746,18 @@ export function WorkspacePanel({
                 </TabsTrigger>
               </WorkspaceTabTooltip>
             )}
-            <WorkspaceTabTooltip label="Agents">
+            <WorkspaceTabTooltip label="Session tree">
               <TabsTrigger
                 value="subagents"
                 aria-label={
                   subagentsWorking > 0
-                    ? `Agents ${subagentsWorking}/${agentCount}`
-                    : `Agents ${agentCount}`
+                    ? `Session tree ${subagentsWorking}/${agentCount} working`
+                    : `Session tree ${agentCount} ${agentCount === 1 ? "worker" : "workers"}`
                 }
                 className="size-8 shrink-0 rounded-md p-0 hover:bg-muted"
               >
                 <BotIcon className="size-4" />
-                <span className="sr-only">Agents</span>
+                <span className="sr-only">Session tree</span>
                 <span
                   className={cn(
                     TAB_BADGE_BASE,
@@ -780,15 +784,15 @@ export function WorkspacePanel({
                 </TabsTrigger>
               </WorkspaceTabTooltip>
             )}
-            {todosSupported && todosTotal > 0 && (
-              <WorkspaceTabTooltip label="Tasks">
+            {todosSupported && (
+              <WorkspaceTabTooltip label="Implementation">
                 <TabsTrigger
                   value="todos"
-                  aria-label={`Tasks ${todosCompleted} of ${todosTotal} completed`}
+                  aria-label={`Implementation ${todosCompleted} of ${todosTotal}, ${WORK_STATUS_LABEL[todosStatus]}`}
                   className="size-8 shrink-0 rounded-md p-0 hover:bg-muted"
                 >
                   <ListTodoIcon className="size-4" />
-                  <span className="sr-only">Tasks</span>
+                  <span className="sr-only">Implementation</span>
                   <span className="sr-only">
                     {todosCompleted}/{todosTotal}
                   </span>
@@ -917,6 +921,9 @@ export function WorkspacePanel({
             conversationId={conversationId}
             rootSessionId={rootSessionId}
             changedCount={changedCount}
+            implementationCompleted={todosCompleted}
+            implementationTotal={todosTotal}
+            implementationStatus={todosStatus}
           />
         ) : rightRailTab === "todos" && todosSupported ? (
           <WorkTree sessionId={conversationId} frameless />

@@ -82,7 +82,7 @@ def test_codex_spawn_activity_appears_in_agents_rail(
     page.goto(f"{base_url}/c/{session_id}")
     open_right_rail(page)
     rail = page.get_by_role("complementary", name="Workspace")
-    rail.get_by_role("tab", name=re.compile("^Agents")).click()
+    rail.get_by_role("tab", name=re.compile("^Session tree")).click()
     child_row = rail.locator('[data-testid="subagent-row"]')
     expect(child_row).to_have_count(1, timeout=30_000)
     expect(child_row).to_contain_text("Codex")

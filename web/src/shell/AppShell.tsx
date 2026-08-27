@@ -82,6 +82,7 @@ import {
 import { TerminalsPanel } from "./TerminalsPanel";
 import { WorkTree } from "./WorkTree";
 import { useWorkTree } from "@/hooks/useWorkTree";
+import { summarizeWorkItems } from "@/lib/workTreeApi";
 import { PermissionsModal } from "@/components/PermissionsModal";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { CommandPalette } from "./CommandPalette";
@@ -369,17 +370,17 @@ export function AppShell() {
   const sessionLabels = { ...activeConv?.labels, ...activeSession?.labels };
   const terminalFirst = sessionLabels["omnigent.ui"] === "terminal";
   const isClaudeNative = sessionLabels["omnigent.wrapper"] === "claude-code-native-ui";
-  // The Tasks tab now shows the durable Work Tree. Provider todo events feed
-  // that tree server-side, so gating on it covers both agent-driven and
-  // user-created work — and the tab survives a provider that forgets its list.
+  // The Implementation tab shows the durable Work Tree. It stays available
+  // even before the first item exists so its creation empty state is reachable.
   const workTreeItems = useWorkTree(conversationId).items;
-  const todosSupported = workTreeItems.length > 0;
+  const todosSupported = Boolean(conversationId);
   // Native-CLI wrapper of either family. Keys harness behavior gates
   // (composer slash commands, `/model`); terminal-first SDK sessions
   // (embedded Omnigent REPL terminal) have NO wrapper label and must
   // keep regular chat behavior. See TerminalFirstContext.tsx.
   const isNativeWrapper = isNativeWrapperLabel(sessionLabels["omnigent.wrapper"]);
-  const todosCompleted = workTreeItems.filter((item) => item.status === "done").length;
+  const workTreeProgress = useMemo(() => summarizeWorkItems(workTreeItems), [workTreeItems]);
+  const todosCompleted = workTreeProgress.completed;
   // Used for the header "Back to parent" link, which is hidden on
   // top-level sessions. The Subagents tab itself is always visible —
   // it lists the root's children plus a "main" entry, so the user
@@ -541,9 +542,9 @@ export function AppShell() {
         // ``railTerminals`` starts empty while the agent loads, so native
         // sessions don't flash the tab.
         terminals: !hideTerminalsTab && railTerminals.length > 0,
-        todos: todosSupported,
+        todos: Boolean(conversationId),
       }) as const,
-    [showFilesPanel, hideTerminalsTab, railTerminals.length, todosSupported],
+    [showFilesPanel, hideTerminalsTab, railTerminals.length, conversationId],
   );
   // Whether the rail has anything at all to show. When false the workspace
   // card doesn't mount and the header hides its collapse toggle — a
@@ -1516,6 +1517,7 @@ export function AppShell() {
                     todosSupported={todosSupported}
                     todosCompleted={todosCompleted}
                     todosTotal={workTreeItems.length}
+                    todosStatus={workTreeProgress.status}
                     rootSessionId={rootSessionId}
                     selectedFilePath={selectedFilePath}
                     openFiles={openFiles}
@@ -1586,7 +1588,7 @@ export function AppShell() {
               {conversationId && rootSessionId && (
                 <MobilePanelDrawer
                   open={subagentsPanelOpen}
-                  title="Agents"
+                  title="Session tree"
                   onClose={() => setSubagentsPanelOpen(false)}
                   testId="subagents-panel-drawer"
                 >
@@ -1594,6 +1596,9 @@ export function AppShell() {
                     conversationId={conversationId}
                     rootSessionId={rootSessionId}
                     changedCount={changedCount}
+                    implementationCompleted={workTreeProgress.completed}
+                    implementationTotal={workTreeProgress.total}
+                    implementationStatus={workTreeProgress.status}
                   />
                 </MobilePanelDrawer>
               )}
@@ -1616,7 +1621,7 @@ export function AppShell() {
               {conversationId && (
                 <MobilePanelDrawer
                   open={todosPanelOpen}
-                  title="Tasks"
+                  title="Implementation"
                   onClose={() => setTodosPanelOpen(false)}
                   testId="todos-panel-drawer"
                 >

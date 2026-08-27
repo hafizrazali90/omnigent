@@ -42,7 +42,7 @@ def test_agents_tab_lists_lone_agent(
     open_right_rail(page)
     rail = page.get_by_role("complementary", name="Workspace")
 
-    agents_tab = rail.get_by_role("tab", name=re.compile("^Agents"))
+    agents_tab = rail.get_by_role("tab", name=re.compile("^Session tree"))
     expect(agents_tab).to_be_visible(timeout=30_000)
     # Badge starts at 1 for a lone agent (childSessions.length + 1).
     expect(agents_tab).to_contain_text("1")

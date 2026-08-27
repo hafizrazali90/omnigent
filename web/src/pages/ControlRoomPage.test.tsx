@@ -1,13 +1,17 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ControlRoomPage } from "./ControlRoomPage";
+import { ControlRoomPage, formatControlRoomModel } from "./ControlRoomPage";
 import * as conversationsHook from "@/hooks/useConversations";
 import * as controlRoomLaneHook from "@/hooks/useControlRoomLane";
+import * as sessionHook from "@/hooks/useSession";
+import * as workTreeHook from "@/hooks/useWorkTree";
 import type { Conversation } from "@/hooks/useConversations";
 
 vi.mock("@/hooks/useConversations", () => ({ useConversations: vi.fn() }));
 vi.mock("@/hooks/useControlRoomLane", () => ({ useControlRoomLane: vi.fn() }));
+vi.mock("@/hooks/useSession", () => ({ useSession: vi.fn() }));
+vi.mock("@/hooks/useWorkTree", () => ({ useWorkTree: vi.fn() }));
 
 function conversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -19,7 +23,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     labels: {},
     permission_level: 3,
     workspace: "/Users/hafiz/Projects/sifu-tutor",
-    agent_name: "Codex",
+    agent_name: "codex-native-ui",
     status: "running",
     pending_elicitations_count: 0,
     runner_online: true,
@@ -68,11 +72,68 @@ beforeEach(() => {
     sendError: null,
     send: vi.fn(),
   });
+  vi.mocked(sessionHook.useSession).mockReturnValue({
+    session: {
+      modelOverride: "gpt-5.6-sol",
+      llmModel: null,
+      usageByModel: { "gpt-5.6-sol": {} },
+      codexModelOptions: [
+        {
+          id: "gpt-5.6-sol",
+          model: "gpt-5.6-sol",
+          displayName: "GPT-5.6 Sol",
+          supportedReasoningEfforts: [],
+          isDefault: true,
+        },
+      ],
+      pendingElicitations: [],
+    },
+    isLoading: false,
+    error: null,
+  } as unknown as ReturnType<typeof sessionHook.useSession>);
+  vi.mocked(workTreeHook.useWorkTree).mockReturnValue({
+    items: [
+      {
+        id: "work_1",
+        title: "Add the payment regression test",
+        nextAction: "Run the focused browser journey",
+        status: "working",
+        sortOrder: 0,
+      },
+    ],
+  } as unknown as ReturnType<typeof workTreeHook.useWorkTree>);
 });
 
 afterEach(() => cleanup());
 
 describe("ControlRoomPage", () => {
+  it("formats observed Claude models and omits ambiguous model history", () => {
+    expect(
+      formatControlRoomModel({
+        modelOverride: null,
+        llmModel: null,
+        usageByModel: { "claude-sonnet-5": {} },
+        codexModelOptions: [],
+      } as unknown as Parameters<typeof formatControlRoomModel>[0]),
+    ).toBe("Claude Sonnet 5");
+    expect(
+      formatControlRoomModel({
+        modelOverride: null,
+        llmModel: null,
+        usageByModel: { "gpt-5.6-sol": {}, "gpt-5.5": {} },
+        codexModelOptions: [],
+      } as unknown as Parameters<typeof formatControlRoomModel>[0]),
+    ).toBeNull();
+    expect(
+      formatControlRoomModel({
+        modelOverride: "openai/gpt-4o-mini",
+        llmModel: null,
+        usageByModel: null,
+        codexModelOptions: [],
+      } as unknown as Parameters<typeof formatControlRoomModel>[0]),
+    ).toBe("GPT-4o Mini");
+  });
+
   it("renders real session metadata as parallel task lanes", () => {
     setQuery([
       conversation(),
@@ -93,12 +154,43 @@ describe("ControlRoomPage", () => {
     expect(lanes).toHaveLength(2);
     expect(within(lanes[0]).getByText("Review payment safeguards")).toBeInTheDocument();
     expect(within(lanes[0]).getByText("sifu-tutor")).toBeInTheDocument();
-    expect(within(lanes[0]).getByText("Codex")).toBeInTheDocument();
+    expect(within(lanes[0]).getByText("GPT-5.6 Sol")).toBeInTheDocument();
+    expect(within(lanes[0]).queryByText("codex-native-ui")).toBeNull();
     expect(within(lanes[0]).getByText("Working")).toBeInTheDocument();
     expect(within(lanes[1]).getByText("Needs you")).toBeInTheDocument();
   });
 
-  it("shows each task finish line and current proof, and calls completed work idle", () => {
+  it("defaults to bounded compact lanes with a scan-first hierarchy and honest columns", () => {
+    setQuery([conversation()]);
+
+    renderPage();
+
+    const lanes = screen.getByTestId("control-room-lanes");
+    const lane = screen.getByTestId("control-room-lane");
+    expect(lanes).toHaveAttribute("data-density", "compact");
+    expect(lanes).toHaveStyle({ gridTemplateColumns: "repeat(4, minmax(17rem, 1fr))" });
+    expect(lane).toHaveClass("h-[30rem]");
+    expect(within(lane).getByText("Working on")).toBeInTheDocument();
+    expect(within(lane).getByText("Add the payment regression test")).toBeInTheDocument();
+    expect(within(lane).queryByText("Now")).toBeNull();
+    expect(within(lane).queryByText("Goal")).toBeNull();
+    expect(within(lane).queryByText("Proof")).toBeNull();
+    expect(within(lane).queryByText("Current session")).toBeNull();
+    expect(within(lane).queryByText("Latest run stopped and needs review.")).toBeNull();
+    expect(within(lane).getByTestId("control-room-lane-transcript")).toHaveClass("overflow-y-auto");
+    expect(
+      within(lane).getByRole("textbox", { name: "Reply to Review payment safeguards" }),
+    ).toHaveAttribute("rows", "1");
+    expect(
+      within(lane).getByRole("textbox", { name: "Reply to Review payment safeguards" }),
+    ).toHaveClass("min-h-10");
+    expect(within(lane).getByRole("button", { name: "Send reply" })).toHaveClass(
+      "size-10",
+      "md:size-10",
+    );
+  });
+
+  it("keeps the task title primary and omits label-derived goal and proof metadata", () => {
     setQuery([
       conversation({
         status: "idle",
@@ -117,13 +209,51 @@ describe("ControlRoomPage", () => {
     renderPage();
 
     const lane = screen.getByTestId("control-room-lane");
-    expect(within(lane).getByText("Finish line")).toBeInTheDocument();
-    expect(within(lane).getByText("PR opened")).toBeInTheDocument();
-    expect(within(lane).getByText("Current proof")).toBeInTheDocument();
-    expect(within(lane).getByText("Pushed branch; no PR")).toBeInTheDocument();
-    expect(within(lane).getByText("Remote SHA matches local")).toBeInTheDocument();
+    expect(within(lane).getByText("Review payment safeguards")).toBeInTheDocument();
+    expect(within(lane).queryByText("PR opened")).toBeNull();
+    expect(within(lane).queryByText("Pushed branch; no PR")).toBeNull();
+    expect(within(lane).queryByText("Remote SHA matches local")).toBeNull();
     expect(within(lane).getByText("Idle")).toBeInTheDocument();
     expect(within(lane).queryByText("Ready")).toBeNull();
+  });
+
+  it("prioritizes a real pending question over the work tree", () => {
+    setQuery([conversation({ pending_elicitations_count: 1 })]);
+    vi.mocked(sessionHook.useSession).mockReturnValue({
+      session: {
+        modelOverride: "gpt-5.6-sol",
+        codexModelOptions: [],
+        usageByModel: { "gpt-5.6-sol": {} },
+        pendingElicitations: [
+          {
+            elicitation_id: "eli_1",
+            params: { message: "Approve the production smoke?", mode: "form" },
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof sessionHook.useSession>);
+
+    renderPage();
+
+    const lane = screen.getByTestId("control-room-lane");
+    expect(within(lane).getByText("Waiting for you")).toBeInTheDocument();
+    expect(within(lane).getByText("Approve the production smoke?")).toBeInTheDocument();
+    expect(within(lane).queryByText("Add the payment regression test")).toBeNull();
+  });
+
+  it("omits the task-state line when no honest structured detail exists", () => {
+    setQuery([conversation({ status: "failed" })]);
+    vi.mocked(workTreeHook.useWorkTree).mockReturnValue({
+      items: [],
+    } as unknown as ReturnType<typeof workTreeHook.useWorkTree>);
+
+    renderPage();
+
+    const lane = screen.getByTestId("control-room-lane");
+    expect(within(lane).getByText("Needs review")).toBeInTheDocument();
+    expect(within(lane).queryByTestId("control-room-task-state")).toBeNull();
   });
 
   it("searches loaded tasks and can fetch older tasks explicitly", () => {
@@ -167,11 +297,17 @@ describe("ControlRoomPage", () => {
       ctrlKey: false,
       pointerType: "mouse",
     });
-    fireEvent.click(screen.getByRole("option", { name: "Compact" }));
+    fireEvent.click(screen.getByRole("option", { name: "Comfortable" }));
     expect(screen.getByTestId("control-room-lanes")).toHaveAttribute("data-columns", "2");
-    expect(screen.getByTestId("control-room-lanes")).toHaveAttribute("data-density", "compact");
+    expect(screen.getByTestId("control-room-lanes")).toHaveAttribute("data-density", "comfortable");
 
-    fireEvent.click(screen.getByRole("button", { name: "Move Prepare CRM release left" }));
+    const crmLane = screen.getAllByTestId("control-room-lane")[1];
+    fireEvent.pointerDown(within(crmLane).getByRole("button", { name: "More task actions" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move task left" }));
     const lanes = screen.getAllByTestId("control-room-lane");
     expect(within(lanes[0]).getByText("Prepare CRM release")).toBeInTheDocument();
     expect(window.localStorage.getItem("agent-os.control-room.order")).toContain("conv_2");
@@ -181,10 +317,28 @@ describe("ControlRoomPage", () => {
     setQuery([conversation()]);
     renderPage();
 
-    expect(screen.getByRole("link", { name: /Open task/i })).toHaveAttribute("href", "/c/conv_1");
-    expect(screen.getByRole("link", { name: /Open in Split Focus/i })).toHaveAttribute(
+    const header = screen.getByTestId("control-room-lane-header");
+    expect(
+      within(header).getByRole("link", { name: "Open task: Review payment safeguards" }),
+    ).toHaveAttribute("href", "/c/conv_1");
+    expect(screen.getAllByRole("link", { name: /Open task/i })).toHaveLength(1);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More task actions" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(screen.getByRole("menuitem", { name: /Open in Split Focus/i })).toHaveAttribute(
       "href",
       "/split-focus?session=conv_1",
+    );
+    expect(screen.getByRole("menuitem", { name: "Move task left" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("menuitem", { name: "Move task right" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
     );
   });
 
