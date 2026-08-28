@@ -248,7 +248,7 @@ describe("click sub-agent in rail (real SubagentsPanel)", () => {
     // any one of these leaves the tab in its prior state.
     const agentsTab = screen
       .getAllByRole("tablist")
-      .map((tablist) => within(tablist).queryByRole("tab", { name: /Agents/i }))
+      .map((tablist) => within(tablist).queryByRole("tab", { name: /Session tree/i }))
       .find((tab): tab is HTMLElement => tab !== null);
     if (!agentsTab) throw new Error("Agents tab was not rendered");
     fireEvent.pointerDown(agentsTab, { button: 0 });
@@ -322,7 +322,7 @@ describe("click sub-agent in rail (real SubagentsPanel)", () => {
 
     // The tab is present with the main-agent-only count; Files stays
     // the default selection.
-    const agentsTab = screen.getByRole("tab", { name: /Agents\s*1/i });
+    const agentsTab = screen.getByRole("tab", { name: /Session tree\s*1 worker/i });
     expect(agentsTab).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tab", { name: /Files/i })).toHaveAttribute("aria-selected", "true");
   });

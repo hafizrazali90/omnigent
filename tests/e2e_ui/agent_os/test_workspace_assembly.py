@@ -17,6 +17,7 @@ def _prepare_task(
     project: str,
     finish_line: str,
     proven_state: str,
+    current_work: str,
 ) -> None:
     response = httpx.patch(
         f"{base_url}/v1/sessions/{session_id}",
@@ -38,6 +39,12 @@ def _prepare_task(
         timeout=10.0,
     )
     response.raise_for_status()
+    work_item = httpx.post(
+        f"{base_url}/v1/sessions/{session_id}/work-items",
+        json={"title": current_work, "status": "working"},
+        timeout=10.0,
+    )
+    work_item.raise_for_status()
 
 
 def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
@@ -54,6 +61,7 @@ def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
         project="sifu-tutor",
         finish_line="PR opened",
         proven_state="Focused tests passed; branch is local",
+        current_work="Review focused test evidence",
     )
     _prepare_task(
         base_url,
@@ -62,6 +70,7 @@ def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
         project="ripple-suite",
         finish_line="Staging verified",
         proven_state="Implementation complete; staging not run",
+        current_work="Prepare the staging verification",
     )
     page.set_viewport_size({"width": 2200, "height": 1200})
 
@@ -76,24 +85,29 @@ def test_agent_os_workspace_preserves_task_truth_across_all_four_surfaces(
     payment_lane = page.get_by_test_id("control-room-lane").filter(
         has_text="Review payment safeguards"
     )
-    expect(payment_lane.get_by_text("PR opened", exact=True)).to_be_visible()
-    expect(
-        payment_lane.get_by_text("Focused tests passed; branch is local", exact=True)
-    ).to_be_visible()
+    expect(payment_lane.get_by_text("Pending", exact=True)).to_be_visible()
+    expect(payment_lane.get_by_text("Review focused test evidence", exact=True)).to_be_visible()
+    expect(payment_lane.get_by_text("PR opened", exact=True)).to_have_count(0)
     page.screenshot(path=str(tmp_path / "agent-os-control-room-assembly.png"), full_page=True)
 
-    payment_lane.get_by_role("link", name="Open task").click()
+    payment_lane.get_by_role("link", name="Open task: Review payment safeguards").click()
     expect(page).to_have_url(f"{base_url}/c/{session_a}")
     expand_workspace = page.get_by_role("button", name="Expand right panel")
     if expand_workspace.is_visible():
         expand_workspace.click()
     workspace = page.get_by_label("Workspace")
     expect(workspace).to_be_visible(timeout=30_000)
-    workspace.get_by_role("tab", name=re.compile(r"Agents \d")).click()
+    workspace.get_by_role("tab", name=re.compile(r"Session tree \d")).click()
     task_brief = page.get_by_test_id("agent-os-task-brief")
     expect(task_brief).to_be_visible()
     expect(task_brief.get_by_text("Task brief", exact=True)).to_be_visible()
     expect(task_brief.get_by_text("PR opened", exact=True)).to_be_visible()
+    expect(
+        page.get_by_role(
+            "progressbar",
+            name="Session implementation progress 0 of 1, Working",
+        )
+    ).to_be_visible()
     page.screenshot(path=str(tmp_path / "agent-os-worker-task-brief.png"), full_page=True)
 
     page.goto(f"{base_url}/split-focus?session={session_a}&session={session_b}")

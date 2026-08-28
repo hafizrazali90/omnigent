@@ -79,7 +79,7 @@ def test_add_subagent_from_dialog(
     # select that tab to mount the panel (and its dialog).
     open_right_rail(page)
     rail = page.get_by_role("complementary", name="Workspace")
-    rail.get_by_role("tab", name=re.compile("^Agents")).click()
+    rail.get_by_role("tab", name=re.compile("^Session tree")).click()
 
     # The trigger is a visually-hidden hook (the rail exposes "Add agent" via
     # its own affordance); dispatch a DOM click so visibility doesn't gate the
@@ -117,5 +117,5 @@ def test_add_subagent_from_dialog(
     page.goto(f"{base_url}/c/{session_id}")
     open_right_rail(page)
     rail = page.get_by_role("complementary", name="Workspace")
-    rail.get_by_role("tab", name=re.compile("^Agents")).click()
+    rail.get_by_role("tab", name=re.compile("^Session tree")).click()
     expect(rail.locator(_SUBAGENT_ROW)).to_have_count(1, timeout=30_000)

@@ -1204,7 +1204,7 @@ describe("Subagents tab", () => {
 
     renderShell("/c/conv_abc");
 
-    const tab = screen.getByRole("tab", { name: /Agents\s*1/i });
+    const tab = screen.getByRole("tab", { name: /Session tree\s*1 worker/i });
     expect(within(tab).getByText("1")).toBeInTheDocument();
     // Files is the default tab, whose content slot mounts FilesPanel.
     expect(screen.getByRole("tab", { name: /Files/i })).toHaveAttribute("aria-selected", "true");
@@ -1222,7 +1222,7 @@ describe("Subagents tab", () => {
     renderShell("/c/conv_abc");
 
     // Agents is no longer the default tab — click to open it.
-    const subagentsTab = screen.getByRole("tab", { name: /Agents/i });
+    const subagentsTab = screen.getByRole("tab", { name: /Session tree/i });
     expect(subagentsTab).toBeInTheDocument();
     fireEvent.mouseDown(subagentsTab);
     expect(screen.getByTestId("subagents-panel")).toHaveAttribute(
@@ -1253,7 +1253,7 @@ describe("Subagents tab", () => {
     // No Terminals tab — terminal renders inline in main.
     expect(screen.queryByRole("tab", { name: /Shells/i })).toBeNull();
     // Subagents tab is present.
-    const subagentsTab = screen.getByRole("tab", { name: /Agents/i });
+    const subagentsTab = screen.getByRole("tab", { name: /Session tree/i });
     expect(subagentsTab).toBeInTheDocument();
     fireEvent.mouseDown(subagentsTab);
     expect(screen.getByTestId("subagents-panel")).toHaveAttribute(
@@ -1301,7 +1301,7 @@ describe("Subagents tab", () => {
     // ("1/3" — two children + the main agent) with the active green
     // (success) tint, so activity is visible without opening the
     // panel. "1/2" means the main agent was dropped from the total.
-    const tab = screen.getByRole("tab", { name: /Agents\s*1\/3/i });
+    const tab = screen.getByRole("tab", { name: /Session tree\s*1\/3 working/i });
     expect(tab).toBeInTheDocument();
     expect(within(tab).getByText("1/3").className).toContain("text-success");
   });
@@ -1344,7 +1344,7 @@ describe("Subagents tab", () => {
     // No busy child → plain total "3" (two children + the main agent)
     // in the muted style (no success tint), so a settled fan-out
     // doesn't draw the eye.
-    const tab = screen.getByRole("tab", { name: /Agents\s*3/i });
+    const tab = screen.getByRole("tab", { name: /Session tree\s*3 workers/i });
     const badge = within(tab).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("text-success");
@@ -1587,7 +1587,7 @@ describe("Subagents tab", () => {
     const { rerender } = render(makeTree());
 
     // 2 = one child + the main agent.
-    let badge = within(screen.getByRole("tab", { name: /Agents/i })).getByText("2");
+    let badge = within(screen.getByRole("tab", { name: /Session tree/i })).getByText("2");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
 
@@ -1620,14 +1620,14 @@ describe("Subagents tab", () => {
     });
     rerender(makeTree());
 
-    badge = within(screen.getByRole("tab", { name: /Agents/i })).getByText("3");
+    badge = within(screen.getByRole("tab", { name: /Session tree/i })).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
     expect(badge.className).not.toContain("text-white");
 
     // Opening the Agents tab keeps the idle count in the same neutral style.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Agents/i }));
-    badge = within(screen.getByRole("tab", { name: /Agents/i })).getByText("3");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Session tree/i }));
+    badge = within(screen.getByRole("tab", { name: /Session tree/i })).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
   });
@@ -1696,7 +1696,7 @@ describe("Subagents tab", () => {
     rerender(makeTree());
 
     // 3 = two streamed-in children + the main agent.
-    const badge = within(screen.getByRole("tab", { name: /Agents/i })).getByText("3");
+    const badge = within(screen.getByRole("tab", { name: /Session tree/i })).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
     expect(badge.className).not.toContain("text-white");
@@ -1760,7 +1760,7 @@ describe("Subagents tab", () => {
 
     renderShell("/c/conv_child");
 
-    expect(screen.getByRole("tab", { name: /Agents/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Session tree/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Files/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Shells/i })).toBeInTheDocument();
   });
@@ -1841,7 +1841,13 @@ describe("Right workspace card visibility", () => {
     expect(screen.queryByRole("tab", { name: /Files/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /Shells/i })).toBeNull();
     // The tab-fallback effect lands on Agents (the only available tab).
-    expect(screen.getByRole("tab", { name: /Agents/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Session tree/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("tab", { name: /Implementation 0 of 0, Not started/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Collapse right panel" })).toBeInTheDocument();
   });
 
@@ -1954,7 +1960,10 @@ describe("Right workspace card visibility", () => {
 
     renderShell("/c/conv_tabmem");
 
-    expect(screen.getByRole("tab", { name: /Agents/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Session tree/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByRole("tab", { name: /Files/i })).toHaveAttribute("aria-selected", "false");
   });
 
@@ -2214,7 +2223,7 @@ describe("Embedded REPL terminal rail inventory", () => {
 
     const tab = screen.getByRole("tab", { name: /Shells/i });
     // Display order: Shells sits to the RIGHT of Agents in the strip.
-    const agentsTab = screen.getByRole("tab", { name: /Agents/i });
+    const agentsTab = screen.getByRole("tab", { name: /Session tree/i });
     expect(agentsTab.compareDocumentPosition(tab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Selecting it mounts the shells list.
     fireEvent.mouseDown(tab);
@@ -2816,8 +2825,8 @@ describe("Mobile session menu", () => {
     // Shells entry means the vendor pane leaked into the inventory.
     expect(screen.getByRole("menuitem", { name: /^Files$/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Shells/i })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: /Agents/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Tasks/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Session tree/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Implementation/i })).toBeInTheDocument();
   });
 
   it("keeps the Terminals entry in terminal-first SDK sessions (no native wrapper)", () => {
@@ -2916,7 +2925,7 @@ describe("Mobile session menu", () => {
     expect(within(drawer).queryByTestId("subagents-panel")).toBeNull();
 
     openSessionMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /Agents/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Session tree/i }));
 
     // After selecting: drawer open, panel mounted against the active id.
     // Failure: openSubagentsPanel didn't set subagentsPanelOpen, or the
@@ -2972,7 +2981,7 @@ describe("Mobile session menu", () => {
     expect(screen.queryByTestId("work-tree-panel")).toBeNull();
 
     openSessionMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /Tasks/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Implementation/i }));
 
     // Failure: openTodosPanel didn't set todosPanelOpen, or the Tasks entry
     // was gated out despite isClaudeNative + a non-empty todo list.
@@ -3004,7 +3013,7 @@ describe("Mobile session menu", () => {
     expect(screen.getByTestId("todos-panel-drawer")).toHaveAttribute("data-state", "closed");
 
     openSessionMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /Tasks/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Implementation/i }));
 
     expect(screen.getByTestId("todos-panel-drawer")).toHaveAttribute("data-state", "open");
     expect(screen.getByTestId("work-tree-panel")).toBeInTheDocument();
@@ -3028,7 +3037,8 @@ describe("Mobile session menu", () => {
       button: 0,
       ctrlKey: false,
     });
-    expect(screen.getByRole("menuitem", { name: /Agents\s*1/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Session tree\s*1/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Implementation/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Files/i })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /Shells/i })).toBeNull();
   });

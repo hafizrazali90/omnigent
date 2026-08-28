@@ -110,9 +110,10 @@ function renderWorkspace(
         terminalsLength={0}
         subagentsWorking={0}
         agentCount={1}
-        todosSupported={false}
+        todosSupported
         todosCompleted={0}
         todosTotal={0}
+        todosStatus="not_started"
         rootSessionId={null}
         selectedFilePath={overrides.selectedFilePath ?? null}
         openFiles={overrides.openFiles ?? []}
@@ -160,16 +161,21 @@ describe("WorkspacePanel surface presentation", () => {
     renderWorkspace();
 
     const filesTab = screen.getByRole("tab", { name: "Files" });
-    const agentsTab = screen.getByRole("tab", { name: "Agents 1" });
+    const agentsTab = screen.getByRole("tab", { name: "Session tree 1 worker" });
+    const implementationTab = screen.getByRole("tab", {
+      name: "Implementation 0 of 0, Not started",
+    });
     expect(filesTab).toHaveClass("size-8", "p-0");
     expect(filesTab).not.toHaveAttribute("title");
     expect(agentsTab).toHaveClass("size-8", "p-0");
     expect(agentsTab).not.toHaveAttribute("title");
+    expect(implementationTab).toHaveClass("size-8", "p-0");
   });
 
   it.each([
     { tabName: "Files", tooltip: "Files" },
-    { tabName: "Agents 1", tooltip: "Agents" },
+    { tabName: "Session tree 1 worker", tooltip: "Session tree" },
+    { tabName: "Implementation 0 of 0, Not started", tooltip: "Implementation" },
   ])("explains the $tabName pane icon with a hover tooltip", async ({ tabName, tooltip }) => {
     renderWorkspace();
 

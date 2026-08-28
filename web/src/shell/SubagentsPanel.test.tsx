@@ -77,12 +77,18 @@ interface RenderOptions {
   rootSessionId?: string;
   /** Real changed-file count surfaced as focused-task evidence. */
   changedCount?: number;
+  implementationCompleted?: number;
+  implementationTotal?: number;
+  implementationStatus?: "not_started" | "working" | "waiting" | "paused" | "blocked" | "done";
 }
 
 function renderPanel({
   conversationId = "conv_parent",
   rootSessionId = "conv_parent",
   changedCount = 0,
+  implementationCompleted = 0,
+  implementationTotal = 0,
+  implementationStatus = "not_started",
   initialEntries,
 }: RenderOptions & { initialEntries?: string[] } = {}) {
   const queryClient = new QueryClient({
@@ -95,6 +101,9 @@ function renderPanel({
           conversationId={conversationId}
           rootSessionId={rootSessionId}
           changedCount={changedCount}
+          implementationCompleted={implementationCompleted}
+          implementationTotal={implementationTotal}
+          implementationStatus={implementationStatus}
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -244,6 +253,9 @@ describe("SubagentsPanel", () => {
       conversationId: "conv_root",
       rootSessionId: "conv_root",
       changedCount: 3,
+      implementationCompleted: 1,
+      implementationTotal: 2,
+      implementationStatus: "working",
     });
 
     const summary = screen.getByTestId("worker-sidebar-summary");
@@ -252,7 +264,12 @@ describe("SubagentsPanel", () => {
     expect(within(summary).getByText("Needs response")).toBeInTheDocument();
     expect(within(summary).getByText("2 workers")).toBeInTheDocument();
     expect(within(summary).getByText("3 changed files")).toBeInTheDocument();
-    expect(within(summary).getByText("1/2 tasks")).toBeInTheDocument();
+    expect(within(summary).getByText("1/2 · Working")).toBeInTheDocument();
+    expect(
+      within(summary).getByRole("progressbar", {
+        name: "Session implementation progress 1 of 2, Working",
+      }),
+    ).toBeInTheDocument();
     expect(within(summary).getByText("2 need you")).toBeInTheDocument();
     expect(
       within(summary).getByText("Commit, push, and deploy still require your approval."),

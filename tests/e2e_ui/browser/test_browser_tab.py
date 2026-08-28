@@ -128,5 +128,5 @@ def test_no_browser_tab_in_plain_browser(
 
     # The Files/Agents tabs prove the rail rendered; the Browser tab must be
     # absent (not merely hidden) in a non-Electron shell.
-    expect(rail.get_by_role("tab", name=re.compile("Agents"))).to_be_visible()
+    expect(rail.get_by_role("tab", name=re.compile("Session tree"))).to_be_visible()
     expect(rail.get_by_role("tab", name=re.compile("Browser"))).to_have_count(0)

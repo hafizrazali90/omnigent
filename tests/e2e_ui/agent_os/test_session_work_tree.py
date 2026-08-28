@@ -16,6 +16,7 @@ events.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import httpx
@@ -64,7 +65,7 @@ def _open_work_tree_panel(page: Page, base_url: str, session_id: str) -> None:
         expand_workspace.click()
     workspace = page.get_by_label("Workspace")
     expect(workspace).to_be_visible(timeout=_TIMEOUT_MS)
-    workspace.get_by_role("tab", name="Tasks").click()
+    workspace.get_by_role("tab", name=re.compile(r"^Implementation")).click()
     expect(page.get_by_test_id("work-tree")).to_be_visible(timeout=_TIMEOUT_MS)
 
 
@@ -199,5 +200,7 @@ def test_a_session_with_no_meaningful_plan_shows_no_work_tree(
         expand_workspace.click()
     workspace = page.get_by_label("Workspace")
     expect(workspace).to_be_visible(timeout=_TIMEOUT_MS)
-    # No tracked work means no Tasks tab at all.
-    expect(workspace.get_by_role("tab", name="Tasks")).to_have_count(0)
+    # Empty implementation stays discoverable so the first step can be added.
+    workspace.get_by_role("tab", name=re.compile(r"^Implementation 0 of 0, Not started")).click()
+    expect(page.get_by_test_id("work-tree-empty")).to_contain_text("No implementation steps yet")
+    expect(page.get_by_role("textbox", name="Add work item")).to_be_visible()

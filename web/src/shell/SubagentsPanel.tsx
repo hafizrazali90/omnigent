@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "@/lib/routing";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { AntigravityIcon } from "@/components/icons/AntigravityIcon";
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { CodexIcon } from "@/components/icons/CodexIcon";
@@ -69,6 +70,7 @@ import {
 } from "@/lib/agentOsUnderstanding";
 import { postEvent, updateSession } from "@/lib/sessionsApi";
 import type { Session, SessionItem } from "@/lib/types";
+import { WORK_STATUS_LABEL, type WorkStatus } from "@/lib/workTreeApi";
 import { cn } from "@/lib/utils";
 
 const SubagentsGraphView = lazy(() =>
@@ -124,6 +126,10 @@ interface SubagentsPanelProps {
   rootSessionId: string;
   /** Real changed-file count for the focused session's workspace. */
   changedCount?: number;
+  /** Durable implementation progress for the focused session. */
+  implementationCompleted?: number;
+  implementationTotal?: number;
+  implementationStatus?: WorkStatus;
 }
 
 type ViewMode = "list" | "graph";
@@ -132,6 +138,9 @@ export function SubagentsPanel({
   conversationId,
   rootSessionId,
   changedCount = 0,
+  implementationCompleted = 0,
+  implementationTotal = 0,
+  implementationStatus = "not_started",
 }: SubagentsPanelProps) {
   const { children, isLoading, error } = useChildSessions(rootSessionId);
   const { session: focusedSession } = useSession(conversationId);
@@ -168,6 +177,9 @@ export function SubagentsPanel({
           rootSession={rootSession}
           directWorkers={children}
           changedCount={changedCount}
+          implementationCompleted={implementationCompleted}
+          implementationTotal={implementationTotal}
+          implementationStatus={implementationStatus}
         />
         <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
         <Suspense
@@ -190,6 +202,9 @@ export function SubagentsPanel({
         rootSession={rootSession}
         directWorkers={children}
         changedCount={changedCount}
+        implementationCompleted={implementationCompleted}
+        implementationTotal={implementationTotal}
+        implementationStatus={implementationStatus}
       />
       <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
       <button
@@ -228,11 +243,17 @@ function WorkerSidebarSummary({
   rootSession,
   directWorkers,
   changedCount,
+  implementationCompleted,
+  implementationTotal,
+  implementationStatus,
 }: {
   session: ReturnType<typeof useSession>["session"];
   rootSession: ReturnType<typeof useSession>["session"];
   directWorkers: ChildSessionInfo[];
   changedCount: number;
+  implementationCompleted: number;
+  implementationTotal: number;
+  implementationStatus: WorkStatus;
 }) {
   const { data: continuity } = useAgentOsContinuity(session?.labels?.["agent_os.session_map"]);
   const nativeAgent = nativeCodingAgentForWrapper(session?.labels?.[WRAPPER_LABEL_KEY]);
@@ -242,8 +263,6 @@ function WorkerSidebarSummary({
     (session?.pendingElicitations?.length ?? 0) > 0
       ? "Needs response"
       : sessionStatus(session?.status).label;
-  const todos = session?.todos ?? [];
-  const completedTodos = todos.filter((todo) => todo.status === "completed").length;
   const needsYou =
     (rootSession?.pendingElicitations?.length ?? 0) +
     directWorkers.reduce((total, worker) => total + worker.pending_elicitations_count, 0);
@@ -291,7 +310,7 @@ function WorkerSidebarSummary({
         />
         <WorkerEvidence
           icon={ListTodoIcon}
-          text={todos.length > 0 ? `${completedTodos}/${todos.length} tasks` : "No task checklist"}
+          text={`${implementationCompleted}/${implementationTotal} · ${WORK_STATUS_LABEL[implementationStatus]}`}
         />
         <WorkerEvidence
           icon={needsYou > 0 ? CircleAlertIcon : ShieldCheckIcon}
@@ -299,6 +318,15 @@ function WorkerSidebarSummary({
           attention={needsYou > 0}
         />
       </div>
+
+      <Progress
+        value={
+          implementationTotal === 0
+            ? 0
+            : Math.round((implementationCompleted / implementationTotal) * 100)
+        }
+        aria-label={`Session implementation progress ${implementationCompleted} of ${implementationTotal}, ${WORK_STATUS_LABEL[implementationStatus]}`}
+      />
 
       <div className="rounded-md border border-border bg-muted/45 px-2.5 py-2">
         <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
@@ -335,8 +363,8 @@ function WorkerSidebarSummary({
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium">Workers</p>
-        <span className="text-[10px] text-muted-foreground">Live session tree</span>
+        <p className="text-xs font-medium">Session tree</p>
+        <span className="text-[10px] text-muted-foreground">Workers and subagents</span>
       </div>
     </section>
   );

@@ -16,6 +16,7 @@ import {
   getWorkTree,
   isVersionConflict,
   resumeWorkItem,
+  summarizeWorkItems,
   updateWorkItem,
   workTreeFromWire,
 } from "./workTreeApi";
@@ -95,6 +96,32 @@ describe("workTreeFromWire", () => {
   it("reads a session with no items as an empty tree", () => {
     const tree = workTreeFromWire({ session_id: SESSION, data: [], related_project_ids: [] });
     expect(tree.items).toEqual([]);
+  });
+});
+
+describe("summarizeWorkItems", () => {
+  it("treats an empty implementation tree as not started", () => {
+    expect(summarizeWorkItems([])).toEqual({
+      completed: 0,
+      total: 0,
+      percent: 0,
+      status: "not_started",
+    });
+  });
+
+  it("reports progress and prioritizes an attention status", () => {
+    expect(
+      summarizeWorkItems([{ status: "done" }, { status: "working" }, { status: "blocked" }]),
+    ).toEqual({ completed: 1, total: 3, percent: 33, status: "blocked" });
+  });
+
+  it("reports done only when every implementation step is done", () => {
+    expect(summarizeWorkItems([{ status: "done" }, { status: "done" }])).toEqual({
+      completed: 2,
+      total: 2,
+      percent: 100,
+      status: "done",
+    });
   });
 });
 

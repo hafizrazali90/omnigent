@@ -161,7 +161,7 @@ def _expect_single_deep_thought_row(page: Page) -> str:
     # round 2's return to the parent restores the remembered open state.
     open_right_rail(page)
     rail = page.get_by_role("complementary", name="Workspace")
-    rail.get_by_role("tab", name=re.compile("^Agents")).click()
+    rail.get_by_role("tab", name=re.compile("^Session tree")).click()
     rows = rail.locator(_SUBAGENT_ROW)
     expect(rows).to_have_count(1, timeout=30_000)
     expect(rows.first).to_contain_text("deep_thought")

@@ -48,6 +48,47 @@ export const WORK_STATUSES: readonly WorkStatus[] = [
   "done",
 ];
 
+/** Plain-language labels shared by tree rows and aggregate progress summaries. */
+export const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
+  not_started: "Not started",
+  working: "Working",
+  waiting: "Waiting",
+  paused: "Paused",
+  blocked: "Blocked",
+  done: "Done",
+};
+
+export interface WorkProgressSummary {
+  completed: number;
+  total: number;
+  percent: number;
+  status: WorkStatus;
+}
+
+/**
+ * Roll a tree up into one honest progress/status summary.
+ * Attention states win, then active work; an empty tree is not started.
+ */
+export function summarizeWorkItems(
+  items: readonly Pick<WorkItem, "status">[],
+): WorkProgressSummary {
+  const total = items.length;
+  const completed = items.filter((item) => item.status === "done").length;
+  let status: WorkStatus = "not_started";
+  if (total > 0 && completed === total) status = "done";
+  else if (items.some((item) => item.status === "blocked")) status = "blocked";
+  else if (items.some((item) => item.status === "waiting")) status = "waiting";
+  else if (items.some((item) => item.status === "working")) status = "working";
+  else if (items.some((item) => item.status === "paused")) status = "paused";
+
+  return {
+    completed,
+    total,
+    percent: total === 0 ? 0 : Math.round((completed / total) * 100),
+    status,
+  };
+}
+
 /** One node of a session's Work Tree. */
 export interface WorkItem {
   id: string;

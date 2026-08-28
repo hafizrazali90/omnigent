@@ -1,7 +1,7 @@
 """E2E: right rail Shells tab and file viewer.
 
 Execution-logs coverage was dropped: that surface used to be a
-``SessionRail`` card but the rail is now tabbed (Agents/Files/Shells)
+``SessionRail`` card but the rail is now tabbed (Session tree/Files/Shells)
 and the only entry point left is the ``md:hidden`` mobile session menu —
 unreachable on the desktop viewport these tests run at.
 """
@@ -28,7 +28,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
     ("tab_name", "tooltip", "expected_state"),
     [
         ("Files", "Files", "active"),
-        ("Agents", "Agents", "inactive"),
+        ("Session tree", "Session tree", "inactive"),
     ],
 )
 def test_workspace_tab_hover_tooltip(
